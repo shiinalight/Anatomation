@@ -642,7 +642,15 @@ def _scene_xml():
 
 def build_model():
     """The operating room with both sites; `show_site` picks which one is visible."""
-    return mj.MjModel.from_xml_string(_scene_xml(), {**_textures(), **_heart_xml()[2]})
+    model = mj.MjModel.from_xml_string(_scene_xml(), {**_textures(), **_heart_xml()[2]})
+    # The viewer's own shortcuts Q (cameras) and Z (lights) are simulator keys (pull the suture,
+    # switch hands). Held keys can slip past undo_viewer_shortcuts, so the room's cameras and
+    # lights have nothing visible to draw: no green camera boxes or frustums, no light markers.
+    model.vis.scale.camera = model.vis.scale.light = 0
+    model.vis.rgba.camera[3] = model.vis.rgba.light[3] = 0
+    if hasattr(model.vis.rgba, "frustum"):
+        model.vis.rgba.frustum[3] = 0
+    return model
 
 
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart", "bypass": "Bypass"}   # site -> button (equality) name
