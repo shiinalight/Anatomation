@@ -1,0 +1,28 @@
+<mujoco model="heart-nih3d">
+  <default>
+    <default class="visual">
+      <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+    </default>
+    <default class="collision">
+      <geom group="3" type="mesh"/>
+    </default>
+  </default>
+  <asset>
+    <material name="Arteries.001" specular="0.5" shininess="0.25" rgba="0.800007 0.000000 0.000624 1.000000"/>
+    <material name="Muscles" specular="0.5" shininess="0.25" rgba="0.814861 0.162154 0.170984 1.000000"/>
+    <material name="Veins" specular="0.5" shininess="0.25" rgba="0.006124 0.000000 0.800007 1.000000"/>
+    <mesh file="heart-nih3d_0.obj"/>
+    <mesh file="heart-nih3d_1.obj"/>
+    <mesh file="heart-nih3d_2.obj"/>
+  </asset>
+  <worldbody>
+    <body name="heart-nih3d">
+      <geom mesh="heart-nih3d_0" material="Veins" class="visual"/>
+      <geom mesh="heart-nih3d_1" material="Arteries.001" class="visual"/>
+      <geom mesh="heart-nih3d_2" material="Muscles" class="visual"/>
+      <geom mesh="heart-nih3d_0" class="collision"/>
+      <geom mesh="heart-nih3d_1" class="collision"/>
+      <geom mesh="heart-nih3d_2" class="collision"/>
+    </body>
+  </worldbody>
+</mujoco>

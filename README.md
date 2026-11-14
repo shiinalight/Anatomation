@@ -38,7 +38,23 @@ Then launch the simulator from this directory:
 | Glove | H recalibrates: rest your hand palm-down, fingers toward the monitor, then press H |
 | Sound | M mutes or unmutes the OR sounds (macOS) |
 
+## Heart surgery (this branch)
+
+The skin pad is replaced by a heart in an open chest (median sternotomy with a
+retractor). The heart is the NIH 3D model in `assets/heart-nih3d/`, loaded from its
+own `heart-nih3d.xml` so its meshes keep their relative paths. Its visible vessels
+(aorta and branches, veins, coronary arteries on the surface) are shown with
+wet-tissue colours instead of the model's pure red and blue.
+
+The repair is a 3 cm laceration on the front wall of the left ventricle, placed by
+ray-casting the model where it stays at least 7 mm from any visible vessel. There are
+five stitch targets (white dots), 6 mm apart, with 6 mm bites. Cutting, needle
+puncture and forceps grip follow the curved heart surface. Placing the blade or
+needle on a vessel gives a warning instead.
+
 ## Files
 
 - `surgical_suturing_guided.py`: glove tracking, instruments and the suturing logic.
-- `or_scene.py`: the operating room (layout, generated textures, lighting, patient monitor, sounds).
+- `or_scene.py`: the operating room (layout, heart model import, heart-surface queries,
+  generated textures, lighting, patient monitor, sounds).
+- `assets/heart-nih3d/`: the heart model (MJCF, three OBJ meshes, MTL), unchanged.
