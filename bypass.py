@@ -11,9 +11,10 @@ lies on the straight arm of the visible coronary artery on the anterior surface,
 aortotomy on the top ridge of the ascending aorta. All heights come from the meshes at
 run time (`HeartTissue.any_point`), so the targets sit exactly on the vessel surfaces.
 
-Both hands work as in theatre (see CuttingStation in surgical_suturing_guided.py): the left
-hand's forceps hold the vessel wall while the right hand cuts, lift each edge before the needle
-passes through it, and take the needle to pull the suture through before the instrument tie.
+Both hands work as in theatre (see CuttingStation in surgical_suturing_guided.py): the right
+hand cuts on its own (no steadying hand in the bypass); while suturing, the left hand's forceps
+lift each edge before the needle passes through it and take the needle to pull the suture through
+before the instrument tie.
 This class supplies the targets and the step logic; the station runs the hands.
 """
 
@@ -70,6 +71,7 @@ class BypassProcedure:
     steady_side = STEADY_SIDE      # the other hand holds the tissue this far beside the line
     steady_reach = .004            # ... within this distance
     steady_tools = (2,)            # forceps on a vessel wall
+    steady_cut = False             # the bypass cuts need no steadying hand (incisions do)
 
     def __init__(self, tissue):
         self.tissue = tissue

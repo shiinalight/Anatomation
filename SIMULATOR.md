@@ -69,7 +69,8 @@ The right hand cuts and drives the needle; the left hand works against it, as in
 The status bar always names the hand and the key for the next step.
 
 - **Cutting**: the left hand steadies the tissue next to the blade (an empty hand stretches
-  the skin, or the forceps hold it). The blade does not open unsteadied tissue.
+  the skin, or the forceps hold it). The blade does not open unsteadied tissue. Free practice
+  and the bypass cuts need no steadying hand.
 - **Each stitch**:
   1. Left forceps lift the first edge (N, F).
   2. Right needle holder passes the needle through it (N, E E, F).
@@ -103,9 +104,9 @@ The status bar shows the current step and the next key to press.
 
 | Step | Tool | How |
 |---|---|---|
-| 1. Cut the coronary artery | Right scalpel, left forceps | Forceps hold the vessel wall beside the white marked line (N, F); N puts the blade on the line, E lowers it, left / right arrows cut along it |
+| 1. Cut the coronary artery | Right scalpel | N puts the blade on the white marked line, E lowers it, left / right arrows cut along it (no steadying hand needed) |
 | 2. Suture the graft onto the coronary | Right needle holder, left forceps | Six stitches around the opening, each as above: forceps lift the graft, needle through the graft (green target), forceps lift the artery, needle through the artery, forceps pull the suture through, T T T |
-| 3. Incise the ascending aorta | Right scalpel, left forceps | Same as step 1, on the aorta |
+| 3. Incise the ascending aorta | Right scalpel | Same as step 1, on the aorta |
 | 4. Suture the graft onto the aorta | Right needle holder, left forceps | Same as step 2; when the last stitch is tied the graft fills with blood |
 
 The marked lines were placed by ray-casting the heart model: the coronary cut lies on

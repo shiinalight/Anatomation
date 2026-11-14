@@ -505,7 +505,8 @@ class CuttingStation:
     The technique follows theatre practice. The right hand cuts and drives the needle, and
     the left hand works against it:
       - cutting: the left hand steadies the tissue next to the blade (fingers stretching the
-        skin, or forceps holding the vessel wall); the blade does not open unsteadied tissue;
+        skin, or forceps holding the tissue); the blade does not open unsteadied tissue (not in
+        free practice or the bypass, see needs_steadying);
       - each needle pass: the forceps first lift the edge the needle goes through;
       - after the exit: the forceps grasp the needle tip and pull the suture through (Q);
       - knot: instrument tie with the needle holder, three throws (T).
@@ -916,6 +917,13 @@ class CuttingStation:
             return self.site.coords(forceps.grip)[1]*self.site.coords(target)[1] > 0
         return True
 
+    def needs_steadying(self):
+        """True if the blade cuts only with the other hand steadying the tissue: guided incisions
+        and the laceration tasks, not free practice or the bypass."""
+        if self.task == "free":
+            return False
+        return self.procedure is None or self.procedure.steady_cut
+
     def steadied(self, blade):
         """True if the other hand steadies the tissue where `blade` cuts. In a bypass the
         forceps must hold the vessel wall beside the marked line."""
@@ -1151,11 +1159,13 @@ class CuttingStation:
                 return blade.side, head + take(blade, 0)
             if self.procedure is not None:
                 tools = self.procedure.steady_tools
-                if steady.held not in tools:
+                if not self.procedure.steady_cut:
+                    pass               # the bypass: the blade cuts without the other hand
+                elif steady.held not in tools:
                     if steady.held is not None and None in tools:
                         return steady.side, head + f"G set down the {steady.tool} (that hand steadies)"
                     return steady.side, head + take(steady, 2)
-                if not self.steadied(blade):
+                elif not self.steadied(blade):
                     what = "forceps hold" if steady.held == 2 else "fingers stretch"
                     return steady.side, head + f"N then F ({what} the tissue beside the line)"
                 if blade.cut_line is None:
@@ -1230,10 +1240,11 @@ class CuttingStation:
             blade = self.holder(0) or right
             placed = blade.cut_line is not None or p.covered.any()
             who = "forceps or fingers" if None in p.steady_tools else "forceps"
-            return [("Scalpel in the right hand", blade.held == 0),
-                    (f"Left hand steadies ({who})", self.steadied(blade) or p.covered.any()),
-                    ("Blade on the line (N, E)", placed and (blade.depth > 0 or p.covered.any())),
-                    (f"Cut along the line: {p.covered.mean():.0%}", False)]
+            steady = ([(f"Left hand steadies ({who})", self.steadied(blade) or p.covered.any())]
+                      if p.steady_cut else [])
+            return ([("Scalpel in the right hand", blade.held == 0)] + steady +
+                    [("Blade on the line (N, E)", placed and (blade.depth > 0 or p.covered.any())),
+                     (f"Cut along the line: {p.covered.mean():.0%}", False)])
 
         def stitch_items(edge_names):
             needle = self.holder(1) or right
@@ -1300,7 +1311,7 @@ class CuttingStation:
                     self.message = "Blade on a vessel! Lift (Q), move away"
             hand.previous_tip = None
             return
-        if self.task != "free" and not self.steadied(hand):   # free practice cuts freely
+        if self.needs_steadying() and not self.steadied(hand):
             self.message = f"Steady the tissue first: {OTHER[hand.side]} hand N then F"
             hand.previous_tip = None
             return

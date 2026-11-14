@@ -48,6 +48,7 @@ def from_site(name):
 
 class IncisionProcedure(BypassProcedure):
     """One marked incision: steady the tissue beside the line, then cut along it."""
+    steady_cut = True
 
     def __init__(self, tissue, line, title, steady_side, steady_reach, steady_tools):
         self.tissue = tissue
