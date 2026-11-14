@@ -22,7 +22,7 @@ import motion_log
 from procedures import DEFAULT, PROCEDURES, from_site, make_procedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
-                      surface_strip, ASSISTANT_BUTTON, AUTOPILOT_BUTTON, CLEAR_BUTTON,
+                      surface_strip, view_groups, ASSISTANT_BUTTON, AUTOPILOT_BUTTON, CLEAR_BUTTON,
                       BOTH_HANDS_BUTTON, GUIDE_BUTTON, PROCEDURES_BUTTON, RESET_HANDS_BUTTON,
                       REVIEW_BUTTON, VOICE_BUTTON,
                       PanelButton,
@@ -60,6 +60,7 @@ TOOL_TIP = (.051, .084, .062, .050)
 SWITCH_HAND = ord("Z")    # keyboard control moves to the other hand (it also follows the steps)
 RESET_HANDS = 0x10000     # from the panel's Reset hands button (a code no keyboard key sends)
 BOTH_HANDS = ord("Y")     # toggles moving both hands together (also the Both hands button)
+SELECT_HAND = {"left": 0x10002, "right": 0x10003}   # double-click on a hand in the viewer
 PULL_HEIGHT = .009        # forceps lift that pulls the suture through after the needle exits
 THROWS = ("double wrap", "single wrap, reversed", "single wrap, squares the knot")
 # GLFW key code -> (axis, metres per tap). Holding a key moves at MOVE_SPEED * step / s.
@@ -755,6 +756,11 @@ class CuttingStation:
             return
         if code == RESET_HANDS:
             self.reset_hands()
+            return
+        if code in SELECT_HAND.values():
+            self.active = next(side for side, c in SELECT_HAND.items() if c == code)
+            self.both = False
+            self.inform(f"Arrows and Q/E move the {self.active} hand")
             return
         if code == BOTH_HANDS:
             self.both = not self.both
@@ -1649,6 +1655,8 @@ def display(gloves, preview, procedure):
     procedures_button = PanelButton(model, data, PROCEDURES_BUTTON)
     reset_hands_button = PanelButton(model, data, RESET_HANDS_BUTTON)
     both_toggle = PanelToggle(model, data, BOTH_HANDS_BUTTON)
+    pick_bodies = {side: model.body(f"pick_{side}").id for side in SIDES}
+    pick_mocap = {side: model.body(f"pick_{side}").mocapid[0] for side in SIDES}
     clear_button = PanelButton(model, data, CLEAR_BUTTON)
     review_button = PanelButton(model, data, REVIEW_BUTTON)
     assistant_button = PanelButton(model, data, ASSISTANT_BUTTON)
@@ -1699,7 +1707,7 @@ def display(gloves, preview, procedure):
           "H re-aims the gloves: press H, then rest your hands flat with fingers toward the screen.\n"
           "M mutes or unmutes the OR sounds.\n"
           "Procedures window (dropdown): pick incision, suture, bypass or free practice; P cycles.\n"
-          "Y (or the Both hands button) makes the arrows and Q/E move both hands together.\n"
+          "Double-click a hand to move it with the arrows; Y (or the Both hands button) moves both.\n"
           "Panel (Equality, right): Procedures (reopens it), Reset hands (hands and view back to\n"
           "      the surgeon's view), Clear repair, Key guide (or K),\n"
           "      Autopilot (replays the best recorded attempt), AI Assistant (I), AI Voice (V),\n"
@@ -1733,7 +1741,13 @@ def display(gloves, preview, procedure):
 
                 # Panel buttons (Equality section) and their keys.
                 with viewer.lock():
-                    undo_viewer_shortcuts(viewer.opt, key_events, display_flags, station.site.groups)
+                    undo_viewer_shortcuts(viewer.opt, key_events, display_flags, view_groups(station.site))
+                    picked = viewer.perturb.select       # double-click on a hand selects it
+                    for side, body in pick_bodies.items():
+                        if picked == body:
+                            pressed.append(SELECT_HAND[side])   # recorded like a key
+                            viewer.perturb.select = 0
+                            viewer.perturb.active = 0
                     clear = clear_button.pressed() or START_OVER in pressed
                     review = review_button.pressed() or REVIEW_KEY in pressed
                     assistant = assistant_button.pressed() or ASSISTANT_KEY in pressed
@@ -1810,6 +1824,10 @@ def display(gloves, preview, procedure):
                              session.autopilot is not None, voice, review, assistant, render)
                 with viewer.lock():
                     draw_user(viewer.user_scn, drawn, session.station, now)
+                    for side, points in drawn.items():     # keep the pick spheres on the palms
+                        data.mocap_pos[pick_mocap[side]] = (
+                            (points["wrist"] + points["middle_proximal"]) / 2 if points else [0, 0, -5])
+                    mj.mj_kinematics(model, data)
                     if voice_toggle.on != coach.voice_on:
                         voice_toggle.set(coach.voice_on)
                     if both_toggle.on != session.station.both:

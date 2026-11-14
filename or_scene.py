@@ -492,6 +492,11 @@ def _scene_xml():
     _open_chest(lambda line: add(line.replace("<geom ", '<geom group="3" ', 1)))
     add('<body name="site_switch_a"/>')    # anchors for the site switch (see SITE_SWITCH)
     add('<body name="site_switch_b"/>')
+    # Double-click targets for the hands (see PICK_GROUP): nearly invisible spheres that the
+    # simulator keeps on each palm.
+    for side in ("left", "right"):
+        add(f'<body name="pick_{side}" mocap="true" pos="0 0 -5"><geom type="sphere" size=".045" '
+            f'group="{PICK_GROUP}" rgba=".5 .5 .5 .002" contype="0" conaffinity="0"/></body>')
     add('<geom type="ellipsoid" pos=".62 .06 .815" size=".56 .24 .075" material="drape"/>')
     add('<geom type="ellipsoid" pos="1.10 .00 .845" size=".04 .05 .06" material="drape"/>')
     add('<geom type="ellipsoid" pos="1.10 .12 .845" size=".04 .05 .06" material="drape"/>')
@@ -663,7 +668,7 @@ def _scene_xml():
     <weld name="Reset hands" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Both hands" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
-    <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
+    <weld name="Key guide" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Autopilot" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="AI Assistant" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="AI Voice" body1="site_switch_a" body2="site_switch_b" active="false"/>
@@ -806,9 +811,19 @@ class SiteSwitch:
         return turned_on[0] if turned_on else None
 
 
+PICK_GROUP = 5     # hand pick spheres: shown (selectable) in the viewer, never hit by tissue probes
+
+
+def view_groups(site):
+    """Geom groups the viewer shows for `site`: the site's own plus the hand pick spheres."""
+    groups = list(site.groups)
+    groups[PICK_GROUP] = 1
+    return groups
+
+
 def show_site(model, option, site):
     """Show `site` in a viewer whose visual options are `option` (an MjvOption)."""
-    option.geomgroup[:] = site.groups
+    option.geomgroup[:] = view_groups(site)
     model.mat_reflectance[model.material("floor").id] = site.floor_reflectance
 
 

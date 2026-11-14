@@ -46,7 +46,7 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 
 | Action | Keys / mouse |
 |---|---|
-| Which hand | The keys act on the hand the next step needs (green band on its cuff); Z swaps to the other hand |
+| Which hand | Double-click a hand to move it with the arrows and Q/E (its cuff turns green). The keys also follow the hand the next step needs; Z swaps to the other hand |
 | Pick an instrument | 1 scalpel, 2 needle holder, 3 forceps, 4 scissors, then G to pick up / set down |
 | Move the hand | Arrows and Q/E (tap for a small step, hold to glide) |
 | Suturing | N aligns the tool, F grips with the forceps (or presses with an empty hand) or passes the needle, T throws a knot, X trims, R clears the pad |
@@ -56,7 +56,7 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 | Procedure | Procedures window (dropdown), or P for the next one. The checklist at the top left shows every step: [x] done, [>] in progress, [ ] still to come, and the last actions completed |
 | Both hands | Y, or the Both hands button (Equality section): the arrows and Q/E move both hands together (both cuffs green); press again to go back to one hand |
 | Reset hands | Reset hands button (Equality section): both hands go back to their start in front of you, keeping their tools, and the camera returns to the surgeon's view |
-| Key guide | Shown in a bar at the bottom right, next to the status box; K or the Key guide button in the Equality section hides it |
+| Key guide | Hidden at start; K or the Key guide button in the Equality section shows it at the bottom right, next to the status box |
 | Start over | R, or the Clear repair button in the same Equality section: the attempt so far is scored and saved, then the site starts fresh with the tools back in the trays |
 | Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
 | AI coach | I opens the assistant window (typed questions), V turns the voice coach on or off, B asks Gemma for a review (also buttons in the Equality section) |
