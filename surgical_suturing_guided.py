@@ -348,7 +348,8 @@ def draw_hand(scene, points, active=False):
     across = np.cross(forward, normal)
     basis = np.column_stack((across, forward, normal))
     # Gown sleeve, with the glove's rolled cuff pulled over it.
-    capsule(wrist - forward*.60, wrist - forward*.07, .031, "gown")
+    # 45 cm: forearm plus a little upper arm, enough to leave the bottom of the default view.
+    capsule(wrist - forward*.45, wrist - forward*.07, .031, "gown")
     capsule(wrist - forward*.095, wrist + forward*.02, .0255, GLOVE)
     add_capsule(scene, wrist - forward*.092, wrist - forward*.082, .0322, GLOVE,
                 mj.mjtGeom.mjGEOM_CYLINDER)
