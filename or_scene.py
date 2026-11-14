@@ -21,10 +21,15 @@ from pathlib import Path
 import mujoco as mj
 import numpy as np
 
+from environment.or_controls import button_xml, heart_obj, obj_center
+
 # --- Layout shared with the gameplay code (metres, world frame, z up) ---------------
 # Heart model (NIH 3D), loaded from its own MJCF so its meshes keep their relative paths.
 HEART_DIR = Path(__file__).resolve().parent / "assets" / "heart-nih3d"
 HEART_XML = HEART_DIR / "heart-nih3d.xml"
+# Another heart model (STL/OBJ: x anterior, y left, z superior; mm or m), placed where the NIH heart
+# is; set by --heart or the "Load heart (STL)" button. Its whole surface counts as heart muscle.
+HEART_FILE = None
 # The operating room (room, lights, table, draped patient, skin window, opened chest,
 # equipment, cables, extra instruments): see environment/README.txt.
 ENV_XML = Path(__file__).resolve().parent / "environment" / "environment_simulator.xml"
@@ -188,12 +193,41 @@ class Tissue:
 
 
 class SkinTissue(Tissue):
-    """The flat skin pad. Its wound and marker lines are part of the static scene."""
+    """The prepped skin in the drape window (the environment's intact skin, geom group 1), queried
+    by ray-casting, so cuts and stitches follow the curve of the chest. The practice area is the
+    pad rectangle; its laceration and marker lines are drawn on the skin each frame."""
+    SKIN_GROUP = 1
+
+    def __init__(self, model, data, site):
+        super().__init__(model, data, site)
+        self.skin_only = np.zeros(6, np.uint8)
+        self.skin_only[self.SKIN_GROUP] = 1
+        self.wound = self._laceration()
 
     def height(self, x, y):
         if PAD_MIN[0] <= x <= PAD_MAX[0] and PAD_MIN[1] <= y <= PAD_MAX[1]:
-            return PAD_TOP
+            return self.probe(x, y, self.skin_only)[0]
         return None
+
+    def _laceration(self):
+        """Surgical-marker guide lines (gentian violet) where entry and exit bites go, and the
+        laceration: swollen pink lips around a wet dark-red gap."""
+        geoms, cy = [], PAD_CENTER[1]
+        for y in (cy - .025, cy + .026):
+            for x in np.arange(-.084, .086, .012):
+                a, b = self.point((x - .0035, y), .0002), self.point((x + .0035, y), .0002)
+                if a is not None and b is not None:
+                    geoms.append(surface_strip(a, b, .0006, .0002, self.normal(x, y), "marker"))
+        xs = np.linspace(-.079, .079, 17)
+        for x0, x1 in zip(xs, xs[1:]):
+            a, b = self.point((x0, cy), .0001), self.point((x1, cy), .0001)
+            if a is None or b is None:
+                continue
+            n = self.normal((x0 + x1)/2, cy)
+            taper = max(0.0, 1 - ((x0 + x1)/2 / .079)**2)**.5
+            geoms.append(surface_strip(a, b, .0045*taper + .0004, .0004, n, "lip"))
+            geoms.append(surface_strip(a + n*.0002, b + n*.0002, .0017*taper + .0002, .0005, n, "wound"))
+        return geoms
 
 
 class HeartTissue(Tissue):
@@ -243,6 +277,8 @@ class HeartTissue(Tissue):
         for t0, t1 in zip(ts, ts[1:]):
             a = self.point(site.point(t0, 0), .0003)
             b = self.point(site.point(t1, 0), .0003)
+            if a is None or b is None:      # another heart model (HEART_FILE) may not reach here
+                continue
             taper = 1 - (abs(t0 + t1)/2 / site.half)**2
             n = self.normal(*site.point((t0 + t1)/2, 0))
             geoms.append(surface_strip(a, b, .0012 + .0030*taper, .0004, n, site.lip_material))
@@ -251,6 +287,8 @@ class HeartTissue(Tissue):
             for side in (-site.bite_guide, site.bite_guide):
                 xy = site.point(site.slot(k), side)
                 c = self.point(xy, .0002)
+                if c is None:
+                    continue
                 n = self.normal(*xy)
                 geoms.append(surface_strip(c, c + 1e-5*_tangent(n), .0007, .0002, n, "target"))
         return geoms
@@ -322,14 +360,22 @@ def _heart_xml():
     geoms = []
     HEART_GEOMS.clear()
     for geom in root.iter("geom"):
-        if geom.get("class") != "visual":
+        if geom.get("class") != "visual" or HEART_FILE:
             continue
         material = geom.get("material")
         name = f"heart_{geom.get('mesh')}"
         HEART_GEOMS[name] = material
         geoms.append(f'<geom name="{name}" type="mesh" mesh="{geom.get("mesh")}" '
                      f'material="{_heart_material(material)}" group="{HEART_GROUP}"/>')
-    body = (f'<body name="heart" pos="{_fmt(HEART_POS)}" xyaxes="{HEART_AXES}">'
+    if HEART_FILE:   # another heart model, centred where the NIH heart is
+        centre = obj_center([data for path, data in files.items() if path.endswith(".obj")])
+        files["heart-custom/heart.obj"] = heart_obj(HEART_FILE, centre)
+        assets.append('<mesh name="custom" file="heart-custom/heart.obj"/>')
+        HEART_GEOMS["heart_custom"] = HEART_MUSCLE_MATERIAL
+        geoms.append(f'<geom name="heart_custom" type="mesh" mesh="custom" '
+                     f'material="{_heart_material(HEART_MUSCLE_MATERIAL)}" group="{HEART_GROUP}"/>')
+    # mocap: the viewer can lift it out, move and turn it (environment/or_controls.py)
+    body = (f'<body name="heart" mocap="true" pos="{_fmt(HEART_POS)}" xyaxes="{HEART_AXES}">'
             + "".join(geoms) + "</body>")
     return assets, body, files
 
@@ -435,8 +481,8 @@ def _scene_xml():
 
     # Room, OR table, drapes, lights and equipment: ENV_XML (included below).
     # Both operating sites are in the model; the viewer shows one at a time by group.
-    # (ENV_XML: intact skin in group 1, opened chest around the heart in group 3)
-    _skin_window(lambda line: add(line.replace("<geom ", '<geom group="1" ', 1)))
+    # (ENV_XML: intact skin in group 1 - the skin site works on it directly, see SkinTissue -
+    # and the opened chest around the heart in group 3)
     add('<body name="site_switch_a"/>')    # anchors for the site switch (see SITE_SWITCH)
     add('<body name="site_switch_b"/>')
     # Mayo stands: stainless trays on a cantilever arm, post and wheeled base behind the table.
@@ -550,6 +596,7 @@ def _scene_xml():
     <weld name="Bypass" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
+    {button_xml("site_switch_a", "site_switch_b")}
   </equality>
   <worldbody>
     {chr(10).join("    " + line for line in g)}
@@ -557,27 +604,6 @@ def _scene_xml():
   </worldbody>
 </mujoco>
 """
-
-
-def _skin_window(add):
-    # Practice pad on the prepped skin in the drape window (the torso is in ENV_XML).
-    (cx, cy), (hx, hy) = PAD_CENTER, PAD_HALF
-    add(f'<geom type="box" pos="{cx} {cy} {PAD_TOP - .0055}" size="{hx} {hy} .0055" material="skin"/>')
-    w = .016
-    for pos, size in (((cx, cy - hy - w + .004), (hx + 2*w, w)), ((cx, cy + hy + w - .004), (hx + 2*w, w)),
-                      ((cx - hx - w + .004, cy), (w, hy)), ((cx + hx + w - .004, cy), (w, hy))):
-        add(f'<geom type="box" pos="{pos[0]:.4f} {pos[1]:.4f} {PAD_TOP + .0006}" '
-            f'size="{size[0]:.4f} {size[1]:.4f} .0012" material="drape"/>')
-    # Surgical-marker guide lines (gentian violet) where entry and exit bites go.
-    for y in (cy - .025, cy + .026):
-        for x in np.arange(-.084, .086, .012):
-            add(f'<geom type="box" pos="{x:.3f} {y} {PAD_TOP + .0002}" size=".0035 .0006 .0002" '
-                f'material="marker"/>')
-    # The laceration to repair: swollen pink lips around a wet dark-red gap.
-    add(f'<geom type="ellipsoid" pos="0 {cy} {PAD_TOP + .0001}" size=".079 .0045 .0004" '
-        f'material="lip"/>')
-    add(f'<geom type="ellipsoid" pos="0 {cy} {PAD_TOP + .0003}" size=".075 .0017 .0005" '
-        f'material="wound"/>')
 
 
 def build_model():

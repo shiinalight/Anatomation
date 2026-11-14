@@ -13,7 +13,9 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
+import or_scene
 from bypass import BypassProcedure
+from environment.or_controls import EnvironmentControls, choose_heart_file
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
                       surface_strip, CLEAR_BUTTON, GUIDE_BUTTON, PanelButton, SiteSwitch)
@@ -381,7 +383,10 @@ class CuttingStation:
     def __init__(self, tissue):
         self.tissue = tissue
         self.site = tissue.site
-        self.procedure = BypassProcedure(tissue) if self.site.procedure == "cabg" else None
+        # The bypass targets are placed on the built-in heart; another heart model is free practice.
+        self.procedure = (BypassProcedure(tissue) if self.site.procedure == "cabg" and not or_scene.HEART_FILE
+                          else None)
+        self.drawn = (0, 0)      # user-scene geoms drawn on the tissue (they follow a lifted heart)
         self.cut_line = None     # marked incision the scalpel is guided along (bypass)
         self.marks = deque(maxlen=450)
         self.stitches = []
@@ -762,6 +767,7 @@ class CuttingStation:
             displacement = np.clip(tip - self.tissue_grip, -.024, .024)
             draw_capsule(scene, self.tissue_grip, self.tissue_grip + displacement, .003, "lip")
         ellipse = mj.mjtGeom.mjGEOM_ELLIPSOID
+        start = scene.ngeom
         for size, pos, matrix, material in self.tissue.wound:
             draw_geom(scene, ellipse, size, pos, matrix, material)
         if self.procedure is not None:
@@ -781,6 +787,7 @@ class CuttingStation:
                 end = self.active_tip()
             if end is not None:
                 self.draw_thread(scene, self.entry, end, False, False)
+        self.drawn = (start, scene.ngeom)
 
     def draw_thread(self, scene, entry, exit, tied, trimmed):
         mid = (entry+exit)/2 + np.array([0., 0., .003 if tied else .013])
@@ -852,6 +859,7 @@ def display(frames, preview, site):
     station = CuttingStation(make_tissue(model, data, site))
     held_keys = HeldKeys()
     sounds = Sounds()
+    controls = EnvironmentControls(model, data)   # panel buttons, room, heart, screens
     last_frame = time.monotonic()
     print("1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
           "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
@@ -861,7 +869,9 @@ def display(frames, preview, site):
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
           "M mutes or unmutes the OR sounds.\n"
           "Switch site: Skin / Heart / Bypass buttons in the Equality panel on the right, or press P.\n"
-          "Clear repair (same panel) removes all cuts, blood and stitches and puts the tools back.",
+          "Clear repair (same panel) removes all cuts, blood and stitches and puts the tools back.\n"
+          "Same panel: Reset view, Reset hands, Reset instruments, Lift heart out, Load heart (STL).\n"
+          "Heart: double-click it to lift it out; Ctrl + right-drag moves it, Ctrl + left-drag turns it.",
           flush=True)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
@@ -885,6 +895,25 @@ def display(frames, preview, site):
                 held_keys.press(code, now)
                 pressed.append(code)
             held = list(held_keys.moves(now, dt))
+
+            # Panel buttons of the operating room (environment/or_controls.py); also keeps the
+            # camera in the room, moves a lifted heart and animates the screens.
+            for button in controls.frame(viewer, now):
+                if button == "Reset view":
+                    pressed.append(RESET_VIEW)
+                elif button == "Reset hands":
+                    heading.reset()
+                    pressed.append(ord("C"))          # set the tool down, hand back to its anchor
+                elif button == "Reset instruments":
+                    station.park()
+                    station.rest = [(p.copy(), TRAY_DIRECTION.copy()) for p in TOOL_HOME]
+                    station.selected = 0
+                    sounds.play("setdown")
+                elif button == "Load heart (STL)":
+                    heart_file = choose_heart_file()
+                    if heart_file:
+                        print(f"Loading heart model {heart_file}", flush=True)
+                        return heart_file, site       # main() reopens the room with it
 
             # Site switching: the Skin / Heart buttons in the viewer's Equality panel, or P.
             with viewer.lock():
@@ -943,9 +972,11 @@ def display(frames, preview, site):
                 status = ("Rokoko live" if heading.locked
                           else "Rest hand flat, fingers to the screen")
 
-            points = station.update(points, pressed, held)
-            with viewer.lock():
+            with controls.heart_at_home(viewer):   # holds the viewer lock
+                points = station.update(points, pressed, held)
                 draw_user(viewer.user_scn, points, station, now)
+            if station.site.groups[2]:             # wounds and stitches move with a lifted heart
+                controls.follow_heart(viewer.user_scn, *station.drawn)
             for event in station.events:
                 sounds.play(event)
             station.events.clear()
@@ -971,17 +1002,28 @@ def display(frames, preview, site):
             time.sleep(max(0, 1/60 - (time.monotonic() - now)))
 
 
+def run(frames, preview, site):
+    """The viewer; opened again with the new model when another heart is loaded."""
+    while True:
+        result = display(frames, preview, site)
+        if result is None:
+            return
+        or_scene.HEART_FILE, site = result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preview", action="store_true", help="Practice cutting with the keyboard and no glove")
     parser.add_argument("--site", choices=sorted(SITES), default="skin",
                         help="What to operate on: the skin pad (default) or the heart")
+    parser.add_argument("--heart", help="Another heart model (STL or OBJ; x anterior, y left, z superior)")
     args = parser.parse_args()
     site = SITES[args.site]
+    or_scene.HEART_FILE = args.heart
     print(f"Operating site: {site.name}", flush=True)
     frames = Frames()
     if args.preview:
-        display(frames, True, site)
+        run(frames, True, site)
         return
     stream_script = SDK / "rgmp_stream.py"
     if not stream_script.is_file():
@@ -996,7 +1038,7 @@ def main():
     ) as process:
         threading.Thread(target=frames.read, args=(process.stdout,), daemon=True).start()
         try:
-            display(frames, False, site)
+            run(frames, False, site)
         finally:
             if process.poll() is None:
                 process.terminate()
