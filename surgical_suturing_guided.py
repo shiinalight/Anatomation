@@ -1708,8 +1708,8 @@ def display(gloves, preview, procedure):
           "M mutes or unmutes the OR sounds.\n"
           "Procedures window (dropdown): pick incision, suture, bypass or free practice; P cycles.\n"
           "Double-click a hand to move it with the arrows; Y (or the Both hands button) moves both.\n"
-          "Panel (Equality, right): Procedures (reopens it), Reset hands (hands and view back to\n"
-          "      the surgeon's view), Clear repair, Key guide (or K),\n"
+          "Panel (Equality, right): Procedures (reopens it), Reset hands (hands back to their\n"
+          "      start), Clear repair, Key guide (or K),\n"
           "      Autopilot (replays the best recorded attempt), AI Assistant (I), AI Voice (V),\n"
           "      Gemma review (B).\n"
           f"{store.status}. {telemetry.status}. {coach.status()}.",
@@ -1762,7 +1762,6 @@ def display(gloves, preview, procedure):
                         pressed.append(BOTH_HANDS)       # recorded like a key, so replays stay exact
                     if reset_hands_button.pressed():
                         pressed.append(RESET_HANDS)      # recorded like a key, so replays stay exact
-                        bench_view(model, data, viewer.cam, site.zoom, site.focus)
                     choice = picker.chosen() if picker is not None else None
                     if SWITCH_SITE in pressed:
                         names = list(PROCEDURES)

@@ -55,7 +55,7 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 | Sound | M mutes or unmutes the OR sounds (macOS) |
 | Procedure | Procedures window (dropdown), or P for the next one. The checklist at the top left shows every step: [x] done, [>] in progress, [ ] still to come, and the last actions completed |
 | Both hands | Y, or the Both hands button (Equality section): the arrows and Q/E move both hands together (both cuffs green); press again to go back to one hand |
-| Reset hands | Reset hands button (Equality section): both hands go back to their start in front of you, keeping their tools, and the camera returns to the surgeon's view |
+| Reset hands | Reset hands button (Equality section): both hands go back to their start in front of you, keeping their tools; the camera stays where it is |
 | Key guide | Hidden at start; K or the Key guide button in the Equality section shows it at the bottom right, next to the status box |
 | Start over | R, or the Clear repair button in the same Equality section: the attempt so far is scored and saved, then the site starts fresh with the tools back in the trays |
 | Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
