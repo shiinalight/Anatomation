@@ -16,10 +16,13 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
+from aiven_store import Telemetry, TrainingStore
 from bypass import STITCHES_PER_ANASTOMOSIS, BypassProcedure
+import motion_log
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
-                      surface_strip, CLEAR_BUTTON, GUIDE_BUTTON, PanelButton, SiteSwitch)
+                      surface_strip, ASSISTANT_BUTTON, AUTOPILOT_BUTTON, CLEAR_BUTTON,
+                      GUIDE_BUTTON, REVIEW_BUTTON, VOICE_BUTTON, PanelButton, PanelToggle, SiteSwitch)
 
 GLOVE_PORT = 12277     # rkk-hand-solver's RGMP v2 output (both gloves, one device each)
 SIDES = ("left", "right")
@@ -516,6 +519,7 @@ class CuttingStation:
         self.throws = 0
         self.rest = [(position.copy(), TRAY_DIRECTION.copy()) for position in TOOL_HOME]
         self._message, self._message_at = "", -1e9
+        self.log = []                    # (kind, detail) of each step, for recording and scoring
         self.events = []                 # sound cues for the display loop
         self.blood = deque(maxlen=220)   # (position, born, final radius)
         self.clock = 0.0
@@ -530,7 +534,17 @@ class CuttingStation:
 
     @message.setter
     def message(self, text):
+        """A warning or a refused action (logged as rejected). See also inform()."""
+        repeat = text == self._message
         self._message, self._message_at = text, time.monotonic()
+        if text and not repeat:      # a warning that stays up (blade on a vessel) counts once
+            self.note("rejected", reason=text)
+
+    def inform(self, text):
+        self._message, self._message_at = text, time.monotonic()
+
+    def note(self, kind, **detail):
+        self.log.append((kind, detail))
 
     def other(self, hand):
         return self.hands[OTHER[hand.side]]
@@ -578,7 +592,8 @@ class CuttingStation:
             self.events.append("setdown")
             if hand.held == 2 and self.needle_grasp is not None and self.throws == 0:
                 self.needle_grasp, self.pulled = None, False   # the needle slips back
-            self.message = f"{hand.label} hand: G (pick up selected tool)"
+            self.note("setdown", hand=hand.side, tool=hand.held)
+            self.inform(f"{hand.label} hand: G (pick up selected tool)")
         hand.held = hand.tool_pose = hand.previous_tip = hand.grip = None
         hand.cut_line = hand.pinch_finger = hand.guide_tip = None
         hand.guide_lower_steps = 0
@@ -683,7 +698,8 @@ class CuttingStation:
         hand.offset[:] = self.rest[index][0] - self.grip_point(hand.pose, finger or "index")
         hand.tool_pose = self.pose_for_tool(hand)
         self.events.append("pickup")
-        self.message = ""
+        self.note("pickup", hand=hand.side, tool=index)
+        self.inform("")
 
     def move(self, hand, code, amount):
         axis = MOVES[code][0]
@@ -718,7 +734,7 @@ class CuttingStation:
     def key(self, code):
         if code == SWITCH_HAND:
             self.active = OTHER[self.active]
-            self.message = f"Keyboard moves the {self.active} hand"
+            self.inform(f"Keyboard moves the {self.active} hand")
             return
         hand = self.hands[self.active]
         if code == ord("R"):
@@ -736,7 +752,7 @@ class CuttingStation:
                 self.move(hand, code, MOVES[code][1])
         elif ord("1") <= code <= ord("4"):
             hand.selected = code - ord("1")
-            self.message = f"{hand.label} hand: G (pick up {TOOL_NAMES[hand.selected].lower()})"
+            self.inform(f"{hand.label} hand: G (pick up {TOOL_NAMES[hand.selected].lower()})")
         elif code == ord("G"):
             if hand.held is not None:
                 self.update_tool_pose(hand)
@@ -769,7 +785,8 @@ class CuttingStation:
             hand.guide_lower_steps = 0
         if self.procedure is not None:
             self.procedure = BypassProcedure(self.tissue)
-        self.message = "Repair cleared"
+        self.note("reset")
+        self.inform("Repair cleared")
 
     # --- targets ------------------------------------------------------------------------
     def cutting_step(self):
@@ -849,21 +866,21 @@ class CuttingStation:
                 return
             hand.grip = None
             hand.offset += target + UP*.006 - self.fingertip(hand)
-            self.message = ""
+            self.inform("")
             return
         if hand.held == 0:
             if self.procedure is not None and self.procedure.align_blade(self, hand):
                 return
-            self.message = "Arrows move, E lowers the blade"
+            self.inform("Arrows move, E lowers the blade")
             return
         if hand.held == 3:
             if self.stitches:
                 hand.offset += self.stitches[-1][1] + UP*.008 - self.active_tip(hand)
-                self.message = ""
+                self.inform("")
             return
         if hand.held == 2:
             hand.grip = None
-            self.message = ""
+            self.inform("")
             if self.exit is not None and self.needle_grasp is None:
                 target = self.exit + UP*.003
             elif self.needle_grasp is not None:
@@ -887,7 +904,7 @@ class CuttingStation:
             return
         hand.guide_tip = target + UP*.004
         hand.guide_lower_steps = 2
-        self.message = ""
+        self.inform("")
 
     def act(self, hand):
         """F: forceps or fingers grip / release; the needle holder passes the needle."""
@@ -903,11 +920,13 @@ class CuttingStation:
             hand.grip = None
             self.needle_grasp = tip[2]
             self.events.append("pickup")
-            self.message = ""
+            self.note("grasp", hand=hand.side)
+            self.inform("")
             return
         if hand.grip is not None:
             hand.grip = None
-            self.message = "Released"
+            self.note("release", hand=hand.side)
+            self.inform("Released")
             return
         surface = self.surface_height(*tip[:2])
         reach = .009 if hand.held == 2 else .015
@@ -916,7 +935,8 @@ class CuttingStation:
             return
         hand.grip = np.array([*tip[:2], surface])
         hand.grip_pass = self.passes
-        self.message = ""
+        self.note("grip", hand=hand.side, tool=hand.held, at=[round(float(v), 4) for v in hand.grip])
+        self.inform("")
 
     def puncture(self, hand):
         if self.exit is not None:
@@ -943,13 +963,17 @@ class CuttingStation:
             label = OTHER[hand.side].capitalize() if forceps is None else forceps.label
             self.message = f"{label} hand: lift this edge with the forceps first (N, F)"
             return
+        guided = self.needle_target()
+        error = None if guided is None else float(np.linalg.norm(point[:2] - guided[:2]))*1000
         if self.entry is None:
             self.entry = point
             hand.guide_tip = None
         else:
             self.exit = point
+        self.note("puncture", hand=hand.side, edge="exit" if self.exit is not None else "entry",
+                  error_mm=None if error is None else round(error, 2))
         self.passes += 1
-        self.message = ""
+        self.inform("")
         self.bleed(point, .0008 if self.procedure is not None else .0011)
         self.events.append("puncture")
 
@@ -985,7 +1009,8 @@ class CuttingStation:
             return
         if self.active_tip(forceps)[2] - self.needle_grasp >= PULL_HEIGHT:
             self.pulled = True
-            self.message = ""
+            self.note("pulled", hand=forceps.side)
+            self.inform("")
             self.events.append("trim")
 
     def throw(self, hand):
@@ -1003,11 +1028,13 @@ class CuttingStation:
             self.message = "Repair full - press R to reset"
             return
         self.throws += 1
-        self.message = ""
+        self.note("throw", hand=hand.side, throw=self.throws)
+        self.inform("")
         self.events.append("tie")
         if self.throws < len(THROWS):
             return
         self.stitches.append((self.entry, self.exit, False))
+        self.note("stitch", number=len(self.stitches))
         self.entry = self.exit = self.needle_grasp = hand.guide_tip = None
         self.pulled, self.throws = False, 0
         forceps = self.holder(2)
@@ -1026,7 +1053,8 @@ class CuttingStation:
             return
         self.stitches[-1] = (entry, exit, True)
         self.events.append("trim")
-        self.message = "Thread trimmed"
+        self.note("trim", stitch=len(self.stitches))
+        self.inform("Thread trimmed")
 
     # --- guidance ----------------------------------------------------------------------
     def plan(self):
@@ -1220,17 +1248,146 @@ class CuttingStation:
                                  .0006, "thread")
 
 
+
+class Session:
+    """One trainee at the table: the station, the recording of the current attempt, its
+    upload to Aiven (PostgreSQL, Kafka), the coach, and the autopilot.
+
+    An attempt starts with a fresh station (start, site switch, R, Clear repair) and ends
+    when the task is complete or the trainee starts over; it is then scored and saved. The
+    autopilot replays the best complete attempt at the site into a fresh station.
+    """
+
+    def __init__(self, model, data, site, store, telemetry=None, coach=None, render=None, now=None):
+        self.model, self.data = model, data
+        self.store, self.telemetry, self.coach = store, telemetry, coach
+        self.render = render or (lambda: None)
+        self.autopilot = None
+        self._notice, self._notice_at = "", -1e9
+        self.last = None             # summary of the last saved attempt
+        self.begin(site, time.monotonic() if now is None else now)
+
+    def begin(self, site, now, record=True):
+        self.site = site
+        self.station = CuttingStation(make_tissue(self.model, self.data, site))
+        self.recorder = (motion_log.Recorder(site.name, "keyboard", sorted(JOINTS), HAND_ANCHOR, now)
+                         if record else None)
+
+    @property
+    def notice(self):
+        return self._notice
+
+    @notice.setter
+    def notice(self, text):
+        self._notice, self._notice_at = text, time.monotonic()
+
+    def recent_notice(self, seconds=8):
+        return self._notice if time.monotonic() - self._notice_at < seconds else ""
+
+    @property
+    def attempt_id(self):
+        return self.recorder.id if self.recorder is not None else None
+
+    def complete(self):
+        st = self.station
+        if st.procedure is not None:
+            return st.procedure.done
+        return len(st.stitches) >= st.site.stitch_slots
+
+    def end(self, now):
+        """Score and save the current attempt (if anything happened)."""
+        if self.recorder is None:
+            return None
+        attempt = self.recorder.finish(now, self.complete(), {"stitches": len(self.station.stitches)})
+        self.recorder = None
+        if attempt is None:
+            return None
+        self.store.save(attempt)
+        self.last = attempt.summary
+        best = self.store.best(self.site.name)
+        ideal = " - new best, the autopilot will replay it" if (
+            best and best[0]["id"] == attempt.summary["id"]) else ""
+        self.notice = (f"Attempt saved: {attempt.summary['score']:.0f}/100 "
+                       f"in {attempt.summary['duration_s']:.0f} s{ideal}")
+        print(self.notice, flush=True)
+        if self.coach is not None:
+            self.coach.attempt_finished(attempt.summary, self.render)
+        return attempt
+
+    def restart(self, now, site=None):
+        self.end(now)
+        self.stop_autopilot(now, restart=False)
+        self.station.park_all()
+        self.begin(site or self.site, now)
+
+    # --- autopilot ------------------------------------------------------------------------
+    def start_autopilot(self, now):
+        best = self.store.best(self.site.name)
+        if best is None:
+            self.notice = f"No complete {self.site.name} attempt recorded yet: finish one first"
+            return False
+        summary, blob = best
+        self.end(now)
+        self.station.park_all()
+        self.begin(self.site, now, record=False)
+        self.autopilot = motion_log.Autopilot(blob)
+        robot = self.store.root / "robot" / f"{self.site.name}-{summary['id']}.json"
+        robot.parent.mkdir(parents=True, exist_ok=True)
+        if not robot.exists():
+            robot.write_text(json.dumps(motion_log.robot_trajectory(blob)), encoding="utf-8")
+        self.notice = (f"Autopilot: replaying the best {self.site.name} attempt "
+                       f"({summary['score']:.0f}/100, {summary['started_at'][:10]}); "
+                       f"robot trajectory in {robot.relative_to(self.store.root.parent)}")
+        print(self.notice, flush=True)
+        return True
+
+    def stop_autopilot(self, now, restart=True):
+        if self.autopilot is None:
+            return
+        self.autopilot = None
+        if restart:
+            self.station.park_all()
+            self.begin(self.site, now)
+            self.notice = "Autopilot off: your turn"
+
+    # --- per frame -------------------------------------------------------------------------
+    def step(self, now, poses, keys, held, live=False):
+        """Advance one frame with the trainee's input (ignored while the autopilot runs)."""
+        if self.autopilot is not None:
+            if self.autopilot.done:
+                poses, keys, held = self._held_pose, [], []
+            else:
+                poses, keys, held = self.autopilot.next()
+                self._held_pose = poses
+        drawn = self.station.update(poses, keys, held)
+        events, self.station.log = self.station.log, []
+        if self.recorder is not None:
+            if live:
+                self.recorder.mode = "glove"
+            self.recorder.frame(now, poses, keys, held, self.station, events)
+        if self.telemetry is not None:
+            self.telemetry.events(self.attempt_id, self.site.name, events)
+            self.telemetry.frame(now, self.attempt_id, self.station, self.autopilot is not None)
+        if self.coach is not None:
+            self.coach.note_events(events)
+        if self.recorder is not None and self.complete():
+            self.end(now)
+        return drawn
+
 SWITCH_SITE = ord("P")
 TOGGLE_GUIDE = ord("K")
+START_OVER = ord("R")
+VOICE_KEY, REVIEW_KEY, ASSISTANT_KEY = ord("V"), ord("B"), ord("I")
 
-# Shown at the bottom right, matching the status box at the bottom left (five rows each).
+# Shown at the bottom right, matching the status box at the bottom left (six rows each).
 # K or the Key guide button hides it.
 KEY_GUIDE = (
     ("KEYS  Hands", "Z other hand (follows steps)   G take / drop"),
     ("Tools", "1 scalpel 2 needle 3 forceps 4 scissors"),
     ("Move", "arrows move   Q/E up/down   N align"),
     ("Act", "F grip / pass needle   T throw   X trim"),
-    ("More", "R clear  0 view  H re-aim  P site  M sound  K keys"),
+    ("AI", "V voice  B Gemma review  I assistant  (panel: Autopilot)"),
+    ("More", "R start over  0 view  H re-aim  P site  M sound  K keys"),
 )
 
 # MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
@@ -1295,6 +1452,26 @@ def glove_poses(gloves, hands, preview, now, reset_heading):
     return poses, status
 
 
+def render_frame(renderer, data, camera, option, drawn, station, now):
+    """An offscreen picture of the operating field as the trainee sees it (for Gemma)."""
+    renderer.update_scene(data, camera=camera, scene_option=option)
+    extra = mj.MjvScene(renderer.model, 8000) if not hasattr(renderer, "_extra") else renderer._extra
+    renderer._extra = extra
+    draw_user(extra, drawn, station, now)
+    scene = renderer.scene
+    for i in range(extra.ngeom):
+        if scene.ngeom >= scene.maxgeom:
+            break
+        target, source = scene.geoms[scene.ngeom], extra.geoms[i]
+        mj.mjv_initGeom(target, source.type, np.zeros(3), np.zeros(3), np.eye(3).ravel(),
+                        np.ones(4, np.float32))
+        for name in ("size", "pos", "mat", "rgba", "matid", "emission", "specular", "shininess",
+                     "reflectance", "category", "dataid", "objtype", "objid"):
+            setattr(target, name, getattr(source, name))
+        scene.ngeom += 1
+    return renderer.render()
+
+
 def display(gloves, preview, site):
     model = build_model()
     Look.model = model
@@ -1302,122 +1479,188 @@ def display(gloves, preview, site):
     mj.mj_forward(model, data)
     switch = SiteSwitch(model, data, site.name)
     clear_button = PanelButton(model, data, CLEAR_BUTTON)
+    review_button = PanelButton(model, data, REVIEW_BUTTON)
+    assistant_button = PanelButton(model, data, ASSISTANT_BUTTON)
+    autopilot_toggle = PanelToggle(model, data, AUTOPILOT_BUTTON)
+    voice_toggle = PanelToggle(model, data, VOICE_BUTTON)
     guide_id = model.equality(GUIDE_BUTTON).id
     last_status = None
     keys = SimpleQueue()
-    station = CuttingStation(make_tissue(model, data, site))
     held_keys = HeldKeys()
     sounds = Sounds()
+    store, telemetry = TrainingStore(), Telemetry()
+    from coach import Coach
+    coach = Coach(store)
+    picture = {"renderer": None, "camera": mj.MjvCamera(), "option": mj.MjvOption(), "drawn": {}}
+
+    def render():
+        """Offscreen frame of the current view for Gemma (None if rendering fails)."""
+        try:
+            if picture["renderer"] is None:
+                picture["renderer"] = mj.Renderer(model, 540, 768)
+            return render_frame(picture["renderer"], data, picture["camera"], picture["option"],
+                                picture["drawn"], session.station, time.monotonic())
+        except Exception as error:     # no offscreen GL context: review the data only
+            print(f"Offscreen render unavailable ({error})", flush=True)
+            return None
+
     last_frame = time.monotonic()
+    session = Session(model, data, site, store, telemetry, coach, render, last_frame)
     print("Two hands: the keyboard moves the hand the next step needs (green cuff); Z swaps it.\n"
           "1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
           "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
           "N aligns the tool, F grips (forceps/fingers) or passes the needle, T throws a knot,\n"
-          "X trims. R clears the repair.\n"
+          "X trims. R starts over (the attempt so far is scored and saved).\n"
           "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan,\n"
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the gloves: press H, then rest your hands flat with fingers toward the screen.\n"
           "M mutes or unmutes the OR sounds.\n"
-          "Switch site: Skin / Heart / Bypass buttons in the Equality panel on the right, or press P.\n"
-          "Clear repair (same panel) removes all cuts, blood and stitches and puts the tools back.",
+          "Panel (Equality, right): Skin / Heart / Bypass (or P), Clear repair, Key guide (or K),\n"
+          "      Autopilot (replays the best recorded attempt), AI Assistant (I), AI Voice (V),\n"
+          "      Gemma review (B).\n"
+          f"{store.status}. {telemetry.status}. {coach.status()}.",
           flush=True)
 
-    with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
-        with viewer.lock():
-            show_site(model, viewer.opt, site)
-            bench_view(model, data, viewer.cam, site.zoom, site.focus)
-            display_flags = viewer.opt.flags.copy()   # normal display; see VIEWER_FLAG_KEYS
-        overlay = getattr(viewer, "set_texts", None)
-        next_overlay = 0.0
-        while viewer.is_running():
-            now = time.monotonic()
-            dt = min(now - last_frame, .1)
-            last_frame = now
-            pressed, key_events = [], []
-            while not keys.empty():
-                code = keys.get_nowait()
-                key_events.append(code)
-                if code in MOVES and code in held_keys.keys:
-                    held_keys.press(code, now)  # OS auto-repeat: continuous motion handles it
-                    continue
-                held_keys.press(code, now)
-                pressed.append(code)
-            held = list(held_keys.moves(now, dt))
-
-            # Site switching: the Skin / Heart buttons in the viewer's Equality panel, or P.
+    try:
+        with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
             with viewer.lock():
-                undo_viewer_shortcuts(viewer.opt, key_events, display_flags, station.site.groups)
-                clear = clear_button.pressed()
-                if TOGGLE_GUIDE in pressed:
-                    data.eq_active[guide_id] = not data.eq_active[guide_id]
-                show_guide = bool(data.eq_active[guide_id])
-                choice = switch.poll()
-                if SWITCH_SITE in pressed:
-                    names = list(SITES)
-                    choice = names[(names.index(station.site.name) + 1) % len(names)]
-                    switch.select(choice)
-            pressed = [code for code in pressed if code not in (SWITCH_SITE, TOGGLE_GUIDE)]
-            if clear and (choice is None or choice == station.site.name):
-                station.park_all()
-                station = CuttingStation(make_tissue(model, data, site))
-                sounds.play("setdown")
-                print("Repair cleared", flush=True)
-            if choice is not None and choice != station.site.name:
-                site = SITES[choice]
-                station.park_all()
-                station = CuttingStation(make_tissue(model, data, site))
-                with viewer.lock():
-                    show_site(model, viewer.opt, site)
-                    bench_view(model, data, viewer.cam, site.zoom, site.focus)
-                sounds.play("switch")
-                print(f"Operating site: {site.name}", flush=True)
+                show_site(model, viewer.opt, site)
+                bench_view(model, data, viewer.cam, site.zoom, site.focus)
+                display_flags = viewer.opt.flags.copy()   # normal display; see VIEWER_FLAG_KEYS
+            overlay = getattr(viewer, "set_texts", None)
+            next_overlay = 0.0
+            while viewer.is_running():
+                now = time.monotonic()
+                dt = min(now - last_frame, .1)
+                last_frame = now
+                pressed, key_events = [], []
+                while not keys.empty():
+                    code = keys.get_nowait()
+                    key_events.append(code)
+                    if code in MOVES and code in held_keys.keys:
+                        held_keys.press(code, now)  # OS auto-repeat: continuous motion handles it
+                        continue
+                    held_keys.press(code, now)
+                    pressed.append(code)
+                held = list(held_keys.moves(now, dt))
+                station = session.station
 
-            if ord("M") in pressed:
-                sounds.muted = not sounds.muted
-                pressed = [code for code in pressed if code != ord("M")]
-            zoom = [code for code in pressed if code in ZOOM_IN | ZOOM_OUT | {RESET_VIEW}]
-            if zoom:
-                pressed = [code for code in pressed if code not in zoom]
+                # Panel buttons (Equality section) and their keys.
                 with viewer.lock():
-                    for code in zoom:
-                        if code == RESET_VIEW:
-                            bench_view(model, data, viewer.cam, site.zoom, site.focus)
-                        else:
-                            if viewer.cam.type != mj.mjtCamera.mjCAMERA_FREE:
+                    undo_viewer_shortcuts(viewer.opt, key_events, display_flags, station.site.groups)
+                    clear = clear_button.pressed() or START_OVER in pressed
+                    review = review_button.pressed() or REVIEW_KEY in pressed
+                    assistant = assistant_button.pressed() or ASSISTANT_KEY in pressed
+                    voice = voice_toggle.changed() or VOICE_KEY in pressed
+                    autopilot = autopilot_toggle.changed()
+                    if TOGGLE_GUIDE in pressed:
+                        data.eq_active[guide_id] = not data.eq_active[guide_id]
+                    show_guide = bool(data.eq_active[guide_id])
+                    choice = switch.poll()
+                    if SWITCH_SITE in pressed:
+                        names = list(SITES)
+                        choice = names[(names.index(station.site.name) + 1) % len(names)]
+                        switch.select(choice)
+                    picture["camera"].lookat[:] = viewer.cam.lookat
+                    picture["camera"].distance = viewer.cam.distance
+                    picture["camera"].azimuth = viewer.cam.azimuth
+                    picture["camera"].elevation = viewer.cam.elevation
+                    picture["option"].geomgroup[:] = station.site.groups
+                taken = {SWITCH_SITE, TOGGLE_GUIDE, START_OVER, REVIEW_KEY, ASSISTANT_KEY, VOICE_KEY}
+                pressed = [code for code in pressed if code not in taken]
+                if clear and (choice is None or choice == station.site.name):
+                    session.restart(now)
+                    sounds.play("setdown")
+                if choice is not None and choice != station.site.name:
+                    site = SITES[choice]
+                    session.restart(now, site)
+                    with viewer.lock():
+                        show_site(model, viewer.opt, site)
+                        bench_view(model, data, viewer.cam, site.zoom, site.focus)
+                    sounds.play("switch")
+                    print(f"Operating site: {site.name}", flush=True)
+                if autopilot:
+                    if autopilot_toggle.on:
+                        if not session.start_autopilot(now):
+                            with viewer.lock():
+                                autopilot_toggle.set(False)
+                    else:
+                        session.stop_autopilot(now)
+                    sounds.play("switch")
+                elif session.autopilot is None and autopilot_toggle.on:
+                    with viewer.lock():
+                        autopilot_toggle.set(False)   # a restart or site switch ended it
+
+                if ord("M") in pressed:
+                    sounds.muted = not sounds.muted
+                    pressed = [code for code in pressed if code != ord("M")]
+                zoom = [code for code in pressed if code in ZOOM_IN | ZOOM_OUT | {RESET_VIEW}]
+                if zoom:
+                    pressed = [code for code in pressed if code not in zoom]
+                    with viewer.lock():
+                        for code in zoom:
+                            if code == RESET_VIEW:
                                 bench_view(model, data, viewer.cam, site.zoom, site.focus)
-                            factor = .8 if code in ZOOM_IN else 1.25
-                            viewer.cam.distance = float(np.clip(viewer.cam.distance*factor, .03, 6))
+                            else:
+                                if viewer.cam.type != mj.mjtCamera.mjCAMERA_FREE:
+                                    bench_view(model, data, viewer.cam, site.zoom, site.focus)
+                                factor = .8 if code in ZOOM_IN else 1.25
+                                viewer.cam.distance = float(np.clip(viewer.cam.distance*factor, .03, 6))
 
-            reset_heading = ord("H") in pressed
-            pressed = [key for key in pressed if key != ord("H")]
-            poses, status = glove_poses(gloves, station.hands, preview, now, reset_heading)
-            drawn = station.update(poses, pressed, held)
-            with viewer.lock():
-                draw_user(viewer.user_scn, drawn, station, now)
-            for event in station.events:
-                sounds.play(event)
-            station.events.clear()
-            sounds.heartbeat(now)
+                reset_heading = ord("H") in pressed
+                pressed = [key for key in pressed if key != ord("H")]
+                poses, status = glove_poses(gloves, session.station.hands, preview, now, reset_heading)
+                live = status.endswith("live") or "glove live" in status
+                drawn = session.step(now, poses, pressed, held, live)
+                picture["drawn"] = drawn
+                coach.update(session.station, session.attempt_id or "autopilot",
+                             session.autopilot is not None, voice, review, assistant, render)
+                with viewer.lock():
+                    draw_user(viewer.user_scn, drawn, session.station, now)
+                    if voice_toggle.on != coach.voice_on:
+                        voice_toggle.set(coach.voice_on)
+                for event in session.station.events:
+                    sounds.play(event)
+                session.station.events.clear()
+                sounds.heartbeat(now)
 
-            if status != last_status:
-                print(status, flush=True)
-                last_status = status
-            if overlay is not None and now >= next_overlay:
-                left, right = station.hands["left"], station.hands["right"]
-                tool_status = (f"L {left.tool}   R {right.tool}   "
-                               f"(keys: {station.active}, Z)")
-                texts = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
-                          "SURGICAL TRAINING\nSite\nHands\nStitches / depth\nAction",
-                          f"{status}\n{station.site.name.capitalize()}  (P or Equality panel)\n{tool_status}\n{len(station.stitches)} / "
-                          f"{station.depth*1000:.1f} mm\n{station.action_prompt()}")]
-                if show_guide:
-                    texts.append((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMRIGHT),
-                                  "\n".join(left for left, _ in KEY_GUIDE),
-                                  "\n".join(right for _, right in KEY_GUIDE)))
-                overlay(texts)
-                next_overlay = now + .10
-            viewer.sync()
-            time.sleep(max(0, 1/60 - (time.monotonic() - now)))
+                if status != last_status:
+                    print(status, flush=True)
+                    last_status = status
+                if overlay is not None and now >= next_overlay:
+                    station = session.station
+                    left, right = station.hands["left"], station.hands["right"]
+                    tool_status = (f"L {left.tool}   R {right.tool}   "
+                                   f"(keys: {station.active}, Z)")
+                    if session.autopilot is not None:
+                        pilot = session.autopilot
+                        action = ("AUTOPILOT finished: Autopilot button off to take over" if pilot.done else
+                                  f"AUTOPILOT {pilot.progress:.0%} (best run {pilot.summary['score']:.0f}/100): "
+                                  f"{station.action_prompt()}")
+                    else:
+                        action = station.action_prompt()
+                    best = store.best(site.name)
+                    scores = (f"last {session.last['score']:.0f}" if session.last else "no attempt yet") + (
+                        f", best {best[0]['score']:.0f}" if best else "")
+                    coach_line = f"{scores}  |  {session.recent_notice() or coach.status()}"
+                    texts = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
+                              "SURGICAL TRAINING\nSite\nHands\nStitches / depth\nAction\nScore / coach",
+                              f"{status}\n{station.site.name.capitalize()}  (P or Equality panel)\n"
+                              f"{tool_status}\n{len(station.stitches)} / {station.depth*1000:.1f} mm\n"
+                              f"{action}\n{coach_line}")]
+                    if show_guide:
+                        texts.append((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMRIGHT),
+                                      "\n".join(left for left, _ in KEY_GUIDE),
+                                      "\n".join(right for _, right in KEY_GUIDE)))
+                    overlay(texts)
+                    next_overlay = now + .10
+                viewer.sync()
+                time.sleep(max(0, 1/60 - (time.monotonic() - now)))
+    finally:
+        session.end(time.monotonic())
+        coach.close()
+        telemetry.close()
+        store.close()
 
 
 def main():

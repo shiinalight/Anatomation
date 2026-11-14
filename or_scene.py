@@ -644,6 +644,10 @@ def _scene_xml():
     <weld name="Bypass" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
+    <weld name="Autopilot" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="AI Assistant" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="AI Voice" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Gemma review" body1="site_switch_a" body2="site_switch_b" active="false"/>
   </equality>
   <worldbody>
     {lights}
@@ -709,6 +713,10 @@ def build_model():
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart", "bypass": "Bypass"}   # site -> button (equality) name
 CLEAR_BUTTON = "Clear repair"
 GUIDE_BUTTON = "Key guide"
+AUTOPILOT_BUTTON = "Autopilot"               # toggle: replay the best recorded attempt
+ASSISTANT_BUTTON = "AI Assistant"          # one-shot: open the assistant window
+VOICE_BUTTON = "AI Voice"                  # toggle: microphone for spoken questions
+REVIEW_BUTTON = "Gemma review"             # one-shot: Gemma debrief of the scene and attempt
 
 
 class PanelButton:
@@ -724,6 +732,29 @@ class PanelButton:
             return False
         self.data.eq_active[self.id] = False
         return True
+
+
+class PanelToggle:
+    """An on/off button in the viewer's Equality panel. changed() reports clicks;
+    set() shows a state chosen by the program."""
+
+    def __init__(self, model, data, name):
+        self.data, self.id = data, model.equality(name).id
+        self.data.eq_active[self.id] = False
+        self.state = False
+
+    @property
+    def on(self):
+        return bool(self.data.eq_active[self.id])
+
+    def changed(self):
+        if self.on == self.state:
+            return False
+        self.state = self.on
+        return True
+
+    def set(self, on):
+        self.data.eq_active[self.id] = self.state = bool(on)
 
 
 class SiteSwitch:

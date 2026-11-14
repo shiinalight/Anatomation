@@ -136,6 +136,8 @@ class BypassProcedure:
         return None if self.done else STEPS[self.step]
 
     def _advance(self, station):
+        station.note("procedure_step", done=self.step + 1, action=STEPS[self.step][0],
+                     vessel=STEPS[self.step][1].name)
         self.step += 1
         self.covered[:] = False
         self.tied = 0

@@ -1,0 +1,6 @@
+# AI coach, recording and Aiven sync (on top of requirements.txt)
+-r requirements.txt
+Pillow
+sounddevice
+psycopg[binary]
+confluent-kafka

@@ -52,7 +52,9 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 | Sound | M mutes or unmutes the OR sounds (macOS) |
 | Operating site | Skin / Heart / Bypass buttons in the right panel's Equality section, or press P to go to the next one |
 | Key guide | Shown in a bar at the bottom right, next to the status box; K or the Key guide button in the Equality section hides it |
-| Start over | Clear repair button in the same Equality section: removes all cuts, blood and stitches and puts the tools back in the trays (R clears cuts and stitches only) |
+| Start over | R, or the Clear repair button in the same Equality section: the attempt so far is scored and saved, then the site starts fresh with the tools back in the trays |
+| Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
+| AI coach | I opens the assistant window (typed questions), V turns the voice coach on or off, B asks Gemma for a review (also buttons in the Equality section) |
 
 ## Two-handed technique
 
@@ -103,6 +105,43 @@ The marked lines were placed by ray-casting the heart model: the coronary cut li
 the straight arm of the visible coronary artery, the aortotomy on the top of the
 ascending aorta. Cutting any other vessel still gives a warning.
 
+## Recording, scoring, autopilot and AI coach
+
+Every attempt (from a fresh site until it is complete, or until R, Clear repair or a site
+switch) is recorded at 60 frames per second: both gloves' joints, every key, and what each
+instrument did. When it ends it is scored and saved.
+
+- **Scoring** (`motion_log.py`): the attempt is split into its tasks (each cut and each stitch).
+  Each task is scored out of 100 on time, instrument travel, refused actions and needle
+  accuracy. The status box shows the last and best scores.
+- **Ideal run and autopilot**: the best complete attempt at a site is its ideal run. The
+  **Autopilot** button replays it into a fresh site, exactly: the same cuts, needle passes and
+  knots, with idle time shortened. Starting the autopilot also writes the instrument trajectory
+  for a two-arm robot to `training-data/robot/<site>-<attempt>.json`: per frame and hand, the
+  tool, tip position, direction and whether it is closed.
+- **Aiven** (`aiven_store.py`): attempts are saved in `training-data/` first and then synced in
+  the background to **Aiven PostgreSQL**:
+  - `sim_attempts`, `sim_tasks` and `sim_recordings` hold the attempts, task scores and recordings;
+  - the `sim_ideal_runs` view gives each site's best run, from any trainee, which is downloaded
+    for the autopilot;
+  - the `sim_task_best` view gives the per-task benchmarks the coach compares against.
+
+  Live instrument telemetry (10 Hz) and step events stream to **Aiven Kafka** (`surgery-telemetry`,
+  `surgery-events`). `python telemetry_monitor.py` follows a session from another computer,
+  for example an instructor station or a robot bridge.
+- **Gemini** (`gemini_voice.py`, `coach.py`) answers spoken or typed questions from the live
+  state: the next step and hand, recent events, and the last attempt against the best results.
+  Answers are read aloud.
+- **Gemma** (`gemma_review.py`) writes a short debrief from a rendered frame and the task scores
+  after each complete attempt, or when you press B. It runs on **Modal** with open weights
+  (`modal_gemma.py`), or on Google AI Studio when Modal is not set up.
+
+Set-up: `pip install -r requirements-ai.txt`, then copy `.env.example` to `.env` and fill in
+what you have (AI Studio key, Modal URL and token, Aiven PostgreSQL URI, Kafka bootstrap).
+Put the Aiven CA certificate in `aiven-ca.pem` and the Kafka `ca.pem`, `service.cert` and
+`service.key` in `kafka/`. Create the two Kafka topics in the Aiven console. Without any of
+this, recording, scoring and the autopilot still work locally.
+
 ## Files
 
 - `surgical_suturing_guided.py`: glove tracking (both gloves), instruments and the
@@ -110,4 +149,11 @@ ascending aorta. Cutting any other vessel still gives a warning.
 - `or_scene.py`: the operating room (layout, heart model import, heart-surface queries,
   generated textures, lighting, patient monitor, sounds).
 - `bypass.py`: the guided coronary bypass procedure (targets, steps, graft).
+- `motion_log.py`: recording, task scoring, autopilot replay and the robot trajectory export.
+- `aiven_store.py`: local-first storage synced to Aiven PostgreSQL, and Kafka telemetry;
+  `telemetry_monitor.py` follows the telemetry live.
+- `coach.py`, `gemini_voice.py`, `gemma_review.py`, `assistant_window.py`: the AI coach
+  (Gemini voice and typed questions, Gemma debriefs, the assistant window). The voice code and
+  window layout are ported from hadi-ce04's `feature/ai-assistant-aiven` branch.
+- `modal_gemma.py`: Gemma served on a Modal GPU (vLLM, OpenAI-compatible API).
 - `assets/heart-nih3d/`: the heart model (MJCF, three OBJ meshes, MTL), unchanged.
