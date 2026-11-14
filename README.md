@@ -1,4 +1,4 @@
-# Surgical Training Simulator
+# Surgical Training Simulatorr
 
 A MuJoCo hackathon demo with a Rokoko-controlled five-finger hand,
 interactive surgical instruments, and guided suturing.
