@@ -777,6 +777,10 @@ def display(frames, preview, site):
         with viewer.lock():
             show_site(model, viewer.opt, site)
             bench_view(model, data, viewer.cam, site.zoom)
+            # MuJoCo's viewer has its own one-key shortcuts that overlap ours (Q shows
+            # camera markers, T transparency, X textures, 0-5 object groups, ...).
+            # Keep its display settings fixed so our keys only do what they say.
+            display_flags = viewer.opt.flags.copy()
         overlay = getattr(viewer, "set_texts", None)
         next_overlay = 0.0
         while viewer.is_running():
@@ -795,6 +799,8 @@ def display(frames, preview, site):
 
             # Site switching: the Skin / Heart buttons in the viewer's Equality panel, or P.
             with viewer.lock():
+                viewer.opt.flags[:] = display_flags
+                viewer.opt.geomgroup[:] = station.site.groups
                 clear = clear_button.pressed()
                 choice = switch.poll()
                 if SWITCH_SITE in pressed:

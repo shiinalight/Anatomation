@@ -547,7 +547,7 @@ def _scene_xml():
     <global offwidth="1600" offheight="1000" fovy="45"/>
     <quality shadowsize="4096" offsamples="8"/>
     <headlight ambient=".08 .08 .08" diffuse=".14 .14 .14" specular=".05 .05 .05"/>
-    <map znear=".006" zfar="30" haze=".2" shadowclip="2.5" shadowscale=".6"/>
+    <map znear=".006" zfar="30" haze=".2" shadowclip="2.5" shadowscale=".6" fogstart="1000" fogend="1001"/>
     <rgba haze=".72 .78 .78 1"/>
   </visual>
   <asset>
