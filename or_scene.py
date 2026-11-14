@@ -613,6 +613,7 @@ def _scene_xml():
     <weld name="Skin" body1="site_switch_a" body2="site_switch_b"/>
     <weld name="Heart" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
   </equality>
   <worldbody>
     {lights}
@@ -677,6 +678,7 @@ def build_model():
 
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart"}   # site -> button (equality) name
 CLEAR_BUTTON = "Clear repair"
+GUIDE_BUTTON = "Key guide"
 
 
 class PanelButton:

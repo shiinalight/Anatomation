@@ -15,7 +15,7 @@ import numpy as np
 
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
-                      surface_strip, CLEAR_BUTTON, PanelButton, SiteSwitch)
+                      surface_strip, CLEAR_BUTTON, GUIDE_BUTTON, PanelButton, SiteSwitch)
 
 SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
 ANCHOR = np.array([0, -0.10, 1.015])
@@ -744,6 +744,28 @@ class CuttingStation:
 
 
 SWITCH_SITE = ord("P")
+TOGGLE_GUIDE = ord("K")
+
+# Shown at the top right of the view (Key guide button or K hides it).
+KEY_GUIDE = (
+    ("KEY GUIDE", ""),
+    ("Pick up a tool", "number, then G"),
+    ("", "1 scalpel   2 needle holder"),
+    ("", "3 forceps   4 scissors"),
+    ("Set tool down", "G"),
+    ("Move hand", "arrows (hold to glide)"),
+    ("Raise / lower", "Q / E"),
+    ("Align tool", "N"),
+    ("Puncture / grip", "F"),
+    ("Tie knot", "T"),
+    ("Trim thread", "X"),
+    ("Clear cuts", "R  (or Clear repair)"),
+    ("Skin / heart", "P  (or Equality panel)"),
+    ("Re-aim glove", "H"),
+    ("Sound on/off", "M"),
+    ("Zoom", "scroll, + / -, 0 resets"),
+    ("Hide this guide", "K  (or Key guide)"),
+)
 
 # MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
 # markers, T transparency, X textures, 0-5 object groups, ...). It keeps its own copy of
@@ -784,6 +806,7 @@ def display(frames, preview, site):
     mj.mj_forward(model, data)
     switch = SiteSwitch(model, data, site.name)
     clear_button = PanelButton(model, data, CLEAR_BUTTON)
+    guide_id = model.equality(GUIDE_BUTTON).id
     heading = Heading()
     last_status = None
     keys = SimpleQueue()
@@ -828,11 +851,14 @@ def display(frames, preview, site):
             with viewer.lock():
                 undo_viewer_shortcuts(viewer.opt, key_events, display_flags, station.site.groups)
                 clear = clear_button.pressed()
+                if TOGGLE_GUIDE in pressed:
+                    data.eq_active[guide_id] = not data.eq_active[guide_id]
+                show_guide = bool(data.eq_active[guide_id])
                 choice = switch.poll()
                 if SWITCH_SITE in pressed:
                     choice = "heart" if station.site.name == "skin" else "skin"
                     switch.select(choice)
-            pressed = [code for code in pressed if code != SWITCH_SITE]
+            pressed = [code for code in pressed if code not in (SWITCH_SITE, TOGGLE_GUIDE)]
             if clear and (choice is None or choice == station.site.name):
                 station.park()
                 station = CuttingStation(make_tissue(model, data, site))
@@ -891,11 +917,16 @@ def display(frames, preview, site):
             if overlay is not None and now >= next_overlay:
                 tool_status = (TOOL_NAMES[station.selected] + " selected"
                                if station.held is None else TOOL_NAMES[station.held] + " held")
-                overlay((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
-                         "SURGICAL TRAINING\nSite\nInstrument\nStitches / depth\nAction",
-                         f"{status}\n{station.site.name.capitalize()}  (switch: Equality panel "
-                         f"on the right, or P)\n{tool_status}\n{len(station.stitches)} / "
-                         f"{station.depth*1000:.1f} mm\n{station.action_prompt()}"))
+                texts = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
+                          "SURGICAL TRAINING\nSite\nInstrument\nStitches / depth\nAction",
+                          f"{status}\n{station.site.name.capitalize()}  (switch: Equality panel "
+                          f"on the right, or P)\n{tool_status}\n{len(station.stitches)} / "
+                          f"{station.depth*1000:.1f} mm\n{station.action_prompt()}")]
+                if show_guide:
+                    texts.append((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_TOPRIGHT),
+                                  "\n".join(left for left, _ in KEY_GUIDE),
+                                  "\n".join(right for _, right in KEY_GUIDE)))
+                overlay(texts)
                 next_overlay = now + .10
             viewer.sync()
             time.sleep(max(0, 1/60 - (time.monotonic() - now)))
