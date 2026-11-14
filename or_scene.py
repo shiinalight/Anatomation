@@ -660,6 +660,7 @@ def _scene_xml():
   <default><geom contype="0" conaffinity="0"/></default>
   <equality>
     <weld name="Procedures" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Reset hands" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
     <weld name="Autopilot" body1="site_switch_a" body2="site_switch_b" active="false"/>
@@ -730,6 +731,7 @@ def build_model():
 
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart", "bypass": "Bypass"}   # site -> button (equality) name
 PROCEDURES_BUTTON = "Procedures"          # one-shot: open the procedure dropdown window
+RESET_HANDS_BUTTON = "Reset hands"         # one-shot: hands and camera back to the surgeon view
 CLEAR_BUTTON = "Clear repair"
 GUIDE_BUTTON = "Key guide"
 AUTOPILOT_BUTTON = "Autopilot"               # toggle: replay the best recorded attempt
