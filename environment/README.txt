@@ -25,27 +25,39 @@ HOW THE SIMULATOR USES IT (already done in or_scene.py / surgical_suturing_guide
 2) In _scene_xml(), directly after </visual>:   <include file="{ENV_XML.as_posix()}"/>
 3) The old room, table, drapes, torso, practice-pad box, open chest, lights, anaesthesia
    workstation and back table were removed; the environment provides them. Kept from the
-   simulator: heart (group 2), Mayo trays with the four tools, patient monitor, site buttons,
-   sounds, hand, instruments and all game logic.
-4) Skin site: SkinTissue ray-casts the environment's intact skin (group 1) inside the pad
-   rectangle, so cutting and suturing follow the chest; laceration and marker lines are drawn on it.
-5) or_controls.EnvironmentControls (each frame: controls.frame(viewer, now); station update and
-   drawing inside controls.heart_at_home(viewer); then controls.follow_heart(...)):
-   - Equality-panel buttons: Reset view, Reset hands, Reset instruments, Lift heart out,
-     Load heart (STL) (button_xml() adds them to <equality>)
+   simulator: heart (group 2), Mayo trays with the four tools, patient monitor, hand pick spheres
+   (group 5), Procedures window, panel buttons, sounds, both hands, recording, autopilot, AI coach
+   and all game logic.
+4) Skin: SkinTissue ray-casts the environment's intact skin (group 1) inside the pad rectangle,
+   so cutting and suturing follow the chest; laceration and marker lines are drawn on it.
+   make_tissue() builds a site inside or_controls.heart_home() (works with the heart lifted out);
+   With another heart model (HEART_FILE) the bypass marks (placed for the NIH heart) are projected
+   onto it.
+5) The hook in surgical_suturing_guided.py (search for "controls"):
+       controls = EnvironmentControls(model, data)
+       pressed += controls.step(viewer, now, session.station)    # room buttons; Reset view = key 0
+       if controls.new_heart: return controls.new_heart, session.procedure
+       with controls.heart_at_home(viewer): drawn = session.step(...)
+       controls.follow_heart(viewer.user_scn)                     # after draw_user
+       run(): reopens display() with or_scene.HEART_FILE; --heart file.stl
+   What or_controls does:
+   - Equality-panel buttons: Reset view, Reset instruments, Lift heart out, Load heart (STL)
+     (button_xml() adds them to <equality>; Reset hands is the simulator's own button)
    - the free camera stays inside the room (numeric or_room_box)
    - the heart is a mocap body: double-click lifts it out, Ctrl + right-drag moves, Ctrl + left-drag
-     turns; wounds and stitches move with it; the bypass cannulas hide while it is out
+     turns; wounds and stitches (tissue materials near the heart) move with it; the bypass
+     cannulas hide (group 4) while it is out
    - the extra instruments can be moved with Ctrl + drag too; Reset instruments puts them back
    - screens animate from frame strips in the XML (texture <name>_frames + numeric
      or_anim_<name> = frame count, cycle seconds); the heart-lung machine's pumps turn
    - choose_heart_file() / heart_obj(): another heart (STL/OBJ, x anterior, y left, z superior,
      mm or m) centred where the NIH heart is; the viewer reopens with it
 
-Site switch (Skin / Heart / Bypass) works unchanged: show_site() sets the visible geom groups
+Sites (chosen through the Procedures window) work unchanged: show_site() sets the visible geom groups
   skin   -> groups 0, 1      room + intact skin
   heart  -> groups 0, 2, 3   room + heart + opened chest + bypass lines (aorta, right atrium)
-Group 5 holds the environment's invisible helper geoms (never shown). Nothing in groups 2 and 4.
+Group 4 holds the environment's invisible helper geoms (never shown). Nothing of the environment
+in group 2 (the simulator's heart) or group 5 (the simulator's hand pick spheres).
 
 Screens (no duplicates): the simulator's own monitor shows the vitals; the pendant monitor is a
 CT viewer scrolling through the slices, the boom display a beating 3D heart model, the

@@ -302,12 +302,12 @@
       <geom name="or_drape" pos="-4.32987e-15 -4.16334e-16 -5.55112e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_drape_fabric" mesh="or_drape"/>
     </body>
     <body name="or_patient_collision">
-      <geom name="or_collision_upper_chest" size="0.095 0.31 0.288023" pos="-0.325 0.05 0.638023" type="box" contype="3" conaffinity="3" group="5" rgba="0.4 0.6 0.9 0"/>
-      <geom name="or_collision_chest_left" size="0.23 0.085 0.299412" pos="0 0.275 0.649412" type="box" contype="3" conaffinity="3" group="5" rgba="0.4 0.6 0.9 0"/>
-      <geom name="or_collision_chest_right" size="0.23 0.085 0.299412" pos="0 -0.175 0.649412" type="box" contype="3" conaffinity="3" group="5" rgba="0.4 0.6 0.9 0"/>
-      <geom name="or_collision_abdomen" size="0.11 0.31 0.286338" pos="0.34 0.05 0.636338" type="box" contype="3" conaffinity="3" group="5" rgba="0.4 0.6 0.9 0"/>
-      <geom name="or_collision_pelvis" size="0.135 0.31 0.275121" pos="0.585 0.05 0.625121" type="box" contype="3" conaffinity="3" group="5" rgba="0.4 0.6 0.9 0"/>
-      <geom name="or_collision_legs" size="0.35 0.31 0.26775" pos="1.07 0.05 0.61775" type="box" contype="3" conaffinity="3" group="5" rgba="0.4 0.6 0.9 0"/>
+      <geom name="or_collision_upper_chest" size="0.095 0.31 0.288023" pos="-0.325 0.05 0.638023" type="box" contype="3" conaffinity="3" group="4" rgba="0.4 0.6 0.9 0"/>
+      <geom name="or_collision_chest_left" size="0.23 0.085 0.299412" pos="0 0.275 0.649412" type="box" contype="3" conaffinity="3" group="4" rgba="0.4 0.6 0.9 0"/>
+      <geom name="or_collision_chest_right" size="0.23 0.085 0.299412" pos="0 -0.175 0.649412" type="box" contype="3" conaffinity="3" group="4" rgba="0.4 0.6 0.9 0"/>
+      <geom name="or_collision_abdomen" size="0.11 0.31 0.286338" pos="0.34 0.05 0.636338" type="box" contype="3" conaffinity="3" group="4" rgba="0.4 0.6 0.9 0"/>
+      <geom name="or_collision_pelvis" size="0.135 0.31 0.275121" pos="0.585 0.05 0.625121" type="box" contype="3" conaffinity="3" group="4" rgba="0.4 0.6 0.9 0"/>
+      <geom name="or_collision_legs" size="0.35 0.31 0.26775" pos="1.07 0.05 0.61775" type="box" contype="3" conaffinity="3" group="4" rgba="0.4 0.6 0.9 0"/>
     </body>
     <body name="or_operative_field">
       <geom name="or_incise_film_closed_sim" pos="-1.56125e-16 -4.44089e-16 -8.10463e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" material="or_mat_incise" mesh="or_incise_film_closed_sim"/>
@@ -337,20 +337,20 @@
       <joint name="or_debakey_1_free" type="free"/>
       <geom name="or_debakey_1_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_debakey_1_instrument"/>
       <geom name="or_debakey_1_instrument_satin" pos="3.67761e-16 0 -1.51788e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_debakey_1_instrument_satin"/>
-      <geom name="or_debakey_1_col0" size="0.0018 0.0222222" pos="-0.0777778 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
-      <geom name="or_debakey_1_col1" size="0.0018 0.0222222" pos="-0.0333333 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
-      <geom name="or_debakey_1_col2" size="0.0018 0.0222222" pos="0.0111111 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
-      <geom name="or_debakey_1_col3" size="0.0018 0.0222222" pos="0.0555556 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+      <geom name="or_debakey_1_col0" size="0.0018 0.0222222" pos="-0.0777778 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+      <geom name="or_debakey_1_col1" size="0.0018 0.0222222" pos="-0.0333333 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+      <geom name="or_debakey_1_col2" size="0.0018 0.0222222" pos="0.0111111 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+      <geom name="or_debakey_1_col3" size="0.0018 0.0222222" pos="0.0555556 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
       <site name="or_debakey_1_tip" size="0.002" pos="0.1 0 0.0009" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_debakey_1_grip" size="0.002" pos="-0.02 0 0.0018" group="4" rgba="0.2 0.9 1 1"/>
       <body name="or_debakey_1_upper_arm" pos="-0.1 0 0.0018">
         <joint name="or_debakey_1_jaw" stiffness="1" range="0 0.12" ref="0.06" springref="0.06" armature="3e-05" damping="0.01" axis="0 -1 0"/>
         <geom name="or_debakey_1_upper_arm_instrument" pos="-7.07767e-16 -2.01832e-22 -5.0307e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_debakey_1_upper_arm_instrument"/>
         <geom name="or_debakey_1_upper_arm_instrument_satin" pos="-4.30211e-16 7.94093e-22 -4.0766e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_debakey_1_upper_arm_instrument_satin"/>
-        <geom name="or_debakey_1_upper_arm_col0" size="0.0018 0.0222222" pos="0.0221283 0 0.00223091" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
-        <geom name="or_debakey_1_upper_arm_col1" size="0.0018 0.0222222" pos="0.0664927 0 0.00489598" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
-        <geom name="or_debakey_1_upper_arm_col2" size="0.0018 0.0222222" pos="0.110857 0 0.00756105" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
-        <geom name="or_debakey_1_upper_arm_col3" size="0.0018 0.0222222" pos="0.155222 0 0.0102261" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+        <geom name="or_debakey_1_upper_arm_col0" size="0.0018 0.0222222" pos="0.0221283 0 0.00223091" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+        <geom name="or_debakey_1_upper_arm_col1" size="0.0018 0.0222222" pos="0.0664927 0 0.00489598" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+        <geom name="or_debakey_1_upper_arm_col2" size="0.0018 0.0222222" pos="0.110857 0 0.00756105" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
+        <geom name="or_debakey_1_upper_arm_col3" size="0.0018 0.0222222" pos="0.155222 0 0.0102261" quat="0.685579 0 -0.727999 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00375"/>
         <site name="or_debakey_1_tip_upper" size="0.002" pos="0.199586 0 0.0128912" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -358,11 +358,11 @@
       <joint name="or_potts_free" type="free"/>
       <geom name="or_potts_instrument_satin" pos="5.82867e-16 -3.90313e-17 -2.1684e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_potts_instrument_satin"/>
       <geom name="or_potts_instrument" pos="5.68989e-16 -6.93889e-17 -1.77809e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_potts_instrument"/>
-      <geom name="or_potts_col0" size="0.0026 0.0105" pos="-0.145 0.014 0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00263529"/>
-      <geom name="or_potts_col1" size="0.0025 0.0376253" pos="-0.0990651 0.00666916 0.0024" quat="0.707107 -0.0489727 -0.705409 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00782566"/>
-      <geom name="or_potts_col2" size="0.0025 0.0308321" pos="-0.0307651 0.00203166 0.0024" quat="0.707107 -0.0465942 -0.70557 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00647269"/>
-      <geom name="or_potts_col3" size="0.0025 0.00835155" pos="0.00803556 0.00227556 0.0024" quat="0.707107 0.192666 -0.680353 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0019953"/>
-      <geom name="or_potts_col4" size="0.00175 0.00980824" pos="0.0240356 0.0102756 0.0024" quat="0.707107 0.412693 -0.574182 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00107106"/>
+      <geom name="or_potts_col0" size="0.0026 0.0105" pos="-0.145 0.014 0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00263529"/>
+      <geom name="or_potts_col1" size="0.0025 0.0376253" pos="-0.0990651 0.00666916 0.0024" quat="0.707107 -0.0489727 -0.705409 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00782566"/>
+      <geom name="or_potts_col2" size="0.0025 0.0308321" pos="-0.0307651 0.00203166 0.0024" quat="0.707107 -0.0465942 -0.70557 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00647269"/>
+      <geom name="or_potts_col3" size="0.0025 0.00835155" pos="0.00803556 0.00227556 0.0024" quat="0.707107 0.192666 -0.680353 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0019953"/>
+      <geom name="or_potts_col4" size="0.00175 0.00980824" pos="0.0240356 0.0102756 0.0024" quat="0.707107 0.412693 -0.574182 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00107106"/>
       <site name="or_potts_tip" size="0.002" pos="0.032 0.016 0" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_potts_grip" size="0.002" pos="-0.01 0 0" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_potts_ring_finger" size="0.002" pos="-0.145 0.014 0.0024" group="4" rgba="0.2 0.9 1 1"/>
@@ -370,11 +370,11 @@
         <joint name="or_potts_jaw" stiffness="0.05" range="0 0.4" armature="3e-05" damping="0.003"/>
         <geom name="or_potts_jaw_half_instrument_satin" pos="4.996e-16 3.38271e-17 2.55872e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_potts_jaw_half_instrument_satin"/>
         <geom name="or_potts_jaw_half_instrument" pos="6.245e-16 5.20417e-17 1.95156e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_potts_jaw_half_instrument"/>
-        <geom name="or_potts_jaw_half_col0" size="0.0026 0.0105" pos="-0.145 -0.014 -0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00263529"/>
-        <geom name="or_potts_jaw_half_col1" size="0.0025 0.0376253" pos="-0.0990651 -0.00666916 -0.0024" quat="0.707107 0.0489727 -0.705409 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00782566"/>
-        <geom name="or_potts_jaw_half_col2" size="0.0025 0.0308321" pos="-0.0307651 -0.00203166 -0.0024" quat="0.707107 0.0465942 -0.70557 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00647269"/>
-        <geom name="or_potts_jaw_half_col3" size="0.0025 0.00835155" pos="0.00803556 0.00227556 -0.0024" quat="0.707107 0.192666 -0.680353 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0019953"/>
-        <geom name="or_potts_jaw_half_col4" size="0.00175 0.00980824" pos="0.0240356 0.0102756 -0.0024" quat="0.707107 0.412693 -0.574182 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00107106"/>
+        <geom name="or_potts_jaw_half_col0" size="0.0026 0.0105" pos="-0.145 -0.014 -0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00263529"/>
+        <geom name="or_potts_jaw_half_col1" size="0.0025 0.0376253" pos="-0.0990651 -0.00666916 -0.0024" quat="0.707107 0.0489727 -0.705409 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00782566"/>
+        <geom name="or_potts_jaw_half_col2" size="0.0025 0.0308321" pos="-0.0307651 -0.00203166 -0.0024" quat="0.707107 0.0465942 -0.70557 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00647269"/>
+        <geom name="or_potts_jaw_half_col3" size="0.0025 0.00835155" pos="0.00803556 0.00227556 -0.0024" quat="0.707107 0.192666 -0.680353 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0019953"/>
+        <geom name="or_potts_jaw_half_col4" size="0.00175 0.00980824" pos="0.0240356 0.0102756 -0.0024" quat="0.707107 0.412693 -0.574182 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00107106"/>
         <site name="or_potts_ring_thumb" size="0.002" pos="-0.145 -0.014 -0.0024" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -382,20 +382,20 @@
       <joint name="or_castroviejo_free" type="free"/>
       <geom name="or_castroviejo_titanium" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_titanium" mesh="or_castroviejo_titanium"/>
       <geom name="or_castroviejo_instrument_satin" pos="3.19189e-16 0 -1.99493e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_castroviejo_instrument_satin"/>
-      <geom name="or_castroviejo_col0" size="0.0018 0.02" pos="-0.07 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
-      <geom name="or_castroviejo_col1" size="0.0018 0.02" pos="-0.03 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
-      <geom name="or_castroviejo_col2" size="0.0018 0.02" pos="0.01 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
-      <geom name="or_castroviejo_col3" size="0.0018 0.02" pos="0.05 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+      <geom name="or_castroviejo_col0" size="0.0018 0.02" pos="-0.07 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+      <geom name="or_castroviejo_col1" size="0.0018 0.02" pos="-0.03 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+      <geom name="or_castroviejo_col2" size="0.0018 0.02" pos="0.01 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+      <geom name="or_castroviejo_col3" size="0.0018 0.02" pos="0.05 0 0.0012" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
       <site name="or_castroviejo_tip" size="0.002" pos="0.09 0 0.0012" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_castroviejo_grip" size="0.002" pos="-0.018 0 0.0024" group="4" rgba="0.2 0.9 1 1"/>
       <body name="or_castroviejo_upper_arm" pos="-0.09 0 0.0024">
         <joint name="or_castroviejo_jaw" stiffness="1" range="0 0.16" ref="0.09" springref="0.09" armature="3e-05" damping="0.01" axis="0 -1 0"/>
         <geom name="or_castroviejo_upper_arm_titanium" pos="-5.96745e-16 2.07622e-22 -6.245e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_titanium" mesh="or_castroviejo_upper_arm_titanium"/>
         <geom name="or_castroviejo_upper_arm_instrument_satin" pos="-4.16334e-16 -9.92617e-23 -5.89806e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_castroviejo_upper_arm_instrument_satin"/>
-        <geom name="or_castroviejo_upper_arm_col0" size="0.0018 0.02" pos="0.0198112 0 0.00299271" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
-        <geom name="or_castroviejo_upper_arm_col1" size="0.0018 0.02" pos="0.0596493 0 0.00658786" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
-        <geom name="or_castroviejo_upper_arm_col2" size="0.0018 0.02" pos="0.0994874 0 0.010183" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
-        <geom name="or_castroviejo_upper_arm_col3" size="0.0018 0.02" pos="0.139326 0 0.0137781" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+        <geom name="or_castroviejo_upper_arm_col0" size="0.0018 0.02" pos="0.0198112 0 0.00299271" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+        <geom name="or_castroviejo_upper_arm_col1" size="0.0018 0.02" pos="0.0596493 0 0.00658786" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+        <geom name="or_castroviejo_upper_arm_col2" size="0.0018 0.02" pos="0.0994874 0 0.010183" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
+        <geom name="or_castroviejo_upper_arm_col3" size="0.0018 0.02" pos="0.139326 0 0.0137781" quat="0.674582 0 -0.7382 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.004375"/>
         <site name="or_castroviejo_tip_upper" size="0.002" pos="0.179164 0 0.0173733" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -403,11 +403,11 @@
       <joint name="or_satinsky_free" type="free"/>
       <geom name="or_satinsky_instrument_satin" pos="4.23273e-16 -6.41848e-17 -2.25514e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_satinsky_instrument_satin"/>
       <geom name="or_satinsky_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_satinsky_instrument"/>
-      <geom name="or_satinsky_col0" size="0.0026 0.0105" pos="-0.16 0.018 0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00446445"/>
-      <geom name="or_satinsky_col1" size="0.0025 0.0419398" pos="-0.10984 0.00939342 0.0024" quat="0.707107 -0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0147132"/>
-      <geom name="or_satinsky_col2" size="0.0025 0.0341516" pos="-0.0340402 0.00275592 0.0024" quat="0.707107 -0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0120854"/>
-      <geom name="or_satinsky_col3" size="0.0025 0.0293938" pos="0.0282347 0.00817304 0.0024" quat="0.707107 0.196613 -0.679223 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0104801"/>
-      <geom name="or_satinsky_col4" size="0.00175 0.0185323" pos="0.0642347 0.033173 0.0024" quat="0.707107 0.642038 -0.296289 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00325684"/>
+      <geom name="or_satinsky_col0" size="0.0026 0.0105" pos="-0.16 0.018 0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00446445"/>
+      <geom name="or_satinsky_col1" size="0.0025 0.0419398" pos="-0.10984 0.00939342 0.0024" quat="0.707107 -0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0147132"/>
+      <geom name="or_satinsky_col2" size="0.0025 0.0341516" pos="-0.0340402 0.00275592 0.0024" quat="0.707107 -0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0120854"/>
+      <geom name="or_satinsky_col3" size="0.0025 0.0293938" pos="0.0282347 0.00817304 0.0024" quat="0.707107 0.196613 -0.679223 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0104801"/>
+      <geom name="or_satinsky_col4" size="0.00175 0.0185323" pos="0.0642347 0.033173 0.0024" quat="0.707107 0.642038 -0.296289 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00325684"/>
       <site name="or_satinsky_tip" size="0.002" pos="0.072 0.05 0" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_satinsky_grip" size="0.002" pos="-0.01 0 0" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_satinsky_ring_finger" size="0.002" pos="-0.16 0.018 0.0024" group="4" rgba="0.2 0.9 1 1"/>
@@ -415,11 +415,11 @@
         <joint name="or_satinsky_jaw" stiffness="0.05" range="0 0.35" armature="3e-05" damping="0.003"/>
         <geom name="or_satinsky_jaw_half_instrument_satin" pos="4.51028e-16 1.9082e-17 2.34188e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_satinsky_jaw_half_instrument_satin"/>
         <geom name="or_satinsky_jaw_half_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_satinsky_jaw_half_instrument"/>
-        <geom name="or_satinsky_jaw_half_col0" size="0.0026 0.0105" pos="-0.16 -0.018 -0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00446445"/>
-        <geom name="or_satinsky_jaw_half_col1" size="0.0025 0.0419398" pos="-0.10984 -0.00939342 -0.0024" quat="0.707107 0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0147132"/>
-        <geom name="or_satinsky_jaw_half_col2" size="0.0025 0.0341516" pos="-0.0340402 -0.00275592 -0.0024" quat="0.707107 0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0120854"/>
-        <geom name="or_satinsky_jaw_half_col3" size="0.0025 0.0293938" pos="0.0282347 0.00817304 -0.0024" quat="0.707107 0.196613 -0.679223 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0104801"/>
-        <geom name="or_satinsky_jaw_half_col4" size="0.00175 0.0185323" pos="0.0642347 0.033173 -0.0024" quat="0.707107 0.642038 -0.296289 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00325684"/>
+        <geom name="or_satinsky_jaw_half_col0" size="0.0026 0.0105" pos="-0.16 -0.018 -0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00446445"/>
+        <geom name="or_satinsky_jaw_half_col1" size="0.0025 0.0419398" pos="-0.10984 -0.00939342 -0.0024" quat="0.707107 0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0147132"/>
+        <geom name="or_satinsky_jaw_half_col2" size="0.0025 0.0341516" pos="-0.0340402 -0.00275592 -0.0024" quat="0.707107 0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0120854"/>
+        <geom name="or_satinsky_jaw_half_col3" size="0.0025 0.0293938" pos="0.0282347 0.00817304 -0.0024" quat="0.707107 0.196613 -0.679223 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0104801"/>
+        <geom name="or_satinsky_jaw_half_col4" size="0.00175 0.0185323" pos="0.0642347 0.033173 -0.0024" quat="0.707107 0.642038 -0.296289 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00325684"/>
         <site name="or_satinsky_ring_thumb" size="0.002" pos="-0.16 -0.018 -0.0024" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -427,11 +427,11 @@
       <joint name="or_cross_clamp_free" type="free"/>
       <geom name="or_cross_clamp_instrument_satin" pos="4.57967e-16 -6.59195e-17 -2.34188e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_cross_clamp_instrument_satin"/>
       <geom name="or_cross_clamp_instrument" pos="2.56739e-16 -1.12757e-16 -1.9082e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_cross_clamp_instrument"/>
-      <geom name="or_cross_clamp_col0" size="0.0026 0.0105" pos="-0.16 0.018 0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00452254"/>
-      <geom name="or_cross_clamp_col1" size="0.0025 0.0419398" pos="-0.10984 0.00939342 0.0024" quat="0.707107 -0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0149046"/>
-      <geom name="or_cross_clamp_col2" size="0.0025 0.0341516" pos="-0.0340402 0.00275592 0.0024" quat="0.707107 -0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0122426"/>
-      <geom name="or_cross_clamp_col3" size="0.0025 0.0166467" pos="0.0156444 0.00568889 0.0024" quat="0.707107 0.241649 -0.664534 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00625948"/>
-      <geom name="or_cross_clamp_col4" size="0.00175 0.0261242" pos="0.0531444 0.0256889 0.0024" quat="0.707107 0.387361 -0.591567 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00457071"/>
+      <geom name="or_cross_clamp_col0" size="0.0026 0.0105" pos="-0.16 0.018 0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00452254"/>
+      <geom name="or_cross_clamp_col1" size="0.0025 0.0419398" pos="-0.10984 0.00939342 0.0024" quat="0.707107 -0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0149046"/>
+      <geom name="or_cross_clamp_col2" size="0.0025 0.0341516" pos="-0.0340402 0.00275592 0.0024" quat="0.707107 -0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0122426"/>
+      <geom name="or_cross_clamp_col3" size="0.0025 0.0166467" pos="0.0156444 0.00568889 0.0024" quat="0.707107 0.241649 -0.664534 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00625948"/>
+      <geom name="or_cross_clamp_col4" size="0.00175 0.0261242" pos="0.0531444 0.0256889 0.0024" quat="0.707107 0.387361 -0.591567 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00457071"/>
       <site name="or_cross_clamp_tip" size="0.002" pos="0.075 0.04 0" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_cross_clamp_grip" size="0.002" pos="-0.01 0 0" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_cross_clamp_ring_finger" size="0.002" pos="-0.16 0.018 0.0024" group="4" rgba="0.2 0.9 1 1"/>
@@ -439,11 +439,11 @@
         <joint name="or_cross_clamp_jaw" stiffness="0.05" range="0 0.35" armature="3e-05" damping="0.003"/>
         <geom name="or_cross_clamp_jaw_half_instrument_satin" pos="5.48173e-16 2.34188e-17 2.68882e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_cross_clamp_jaw_half_instrument_satin"/>
         <geom name="or_cross_clamp_jaw_half_instrument" pos="2.42861e-16 -2.25514e-17 2.1684e-17" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_cross_clamp_jaw_half_instrument"/>
-        <geom name="or_cross_clamp_jaw_half_col0" size="0.0026 0.0105" pos="-0.16 -0.018 -0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00452254"/>
-        <geom name="or_cross_clamp_jaw_half_col1" size="0.0025 0.0419398" pos="-0.10984 -0.00939342 -0.0024" quat="0.707107 0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0149046"/>
-        <geom name="or_cross_clamp_jaw_half_col2" size="0.0025 0.0341516" pos="-0.0340402 -0.00275592 -0.0024" quat="0.707107 0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0122426"/>
-        <geom name="or_cross_clamp_jaw_half_col3" size="0.0025 0.0166467" pos="0.0156444 0.00568889 -0.0024" quat="0.707107 0.241649 -0.664534 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00625948"/>
-        <geom name="or_cross_clamp_jaw_half_col4" size="0.00175 0.0261242" pos="0.0531444 0.0256889 -0.0024" quat="0.707107 0.387361 -0.591567 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00457071"/>
+        <geom name="or_cross_clamp_jaw_half_col0" size="0.0026 0.0105" pos="-0.16 -0.018 -0.0024" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00452254"/>
+        <geom name="or_cross_clamp_jaw_half_col1" size="0.0025 0.0419398" pos="-0.10984 -0.00939342 -0.0024" quat="0.707107 0.0654437 -0.704072 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0149046"/>
+        <geom name="or_cross_clamp_jaw_half_col2" size="0.0025 0.0341516" pos="-0.0340402 -0.00275592 -0.0024" quat="0.707107 0.0570611 -0.704801 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.0122426"/>
+        <geom name="or_cross_clamp_jaw_half_col3" size="0.0025 0.0166467" pos="0.0156444 0.00568889 -0.0024" quat="0.707107 0.241649 -0.664534 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00625948"/>
+        <geom name="or_cross_clamp_jaw_half_col4" size="0.00175 0.0261242" pos="0.0531444 0.0256889 -0.0024" quat="0.707107 0.387361 -0.591567 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00457071"/>
         <site name="or_cross_clamp_ring_thumb" size="0.002" pos="-0.16 -0.018 -0.0024" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -451,17 +451,17 @@
       <joint name="or_bulldog_1_free" type="free"/>
       <geom name="or_bulldog_1_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_bulldog_1_instrument"/>
       <geom name="or_bulldog_1_instrument_satin" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_bulldog_1_instrument_satin"/>
-      <geom name="or_bulldog_1_col0" size="0.0018 0.0096" pos="-0.0124 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
-      <geom name="or_bulldog_1_col1" size="0.0018 0.0096" pos="0.0068 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
-      <geom name="or_bulldog_1_col2" size="0.0045 0.006" pos="-0.019 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00433526"/>
+      <geom name="or_bulldog_1_col0" size="0.0018 0.0096" pos="-0.0124 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
+      <geom name="or_bulldog_1_col1" size="0.0018 0.0096" pos="0.0068 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
+      <geom name="or_bulldog_1_col2" size="0.0045 0.006" pos="-0.019 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00433526"/>
       <site name="or_bulldog_1_tip" size="0.002" pos="0.026 0 0.0009" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_bulldog_1_grip" size="0.002" pos="-0.0028 0 0.0018" group="4" rgba="0.2 0.9 1 1"/>
       <body name="or_bulldog_1_upper_arm" pos="-0.022 0 0.0018">
         <joint name="or_bulldog_1_jaw" stiffness="0.02" range="0 0.35" springref="-0.08" armature="3e-05" damping="0.01" axis="0 -1 0"/>
         <geom name="or_bulldog_1_upper_arm_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_bulldog_1_upper_arm_instrument"/>
         <geom name="or_bulldog_1_upper_arm_instrument_satin" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_bulldog_1_upper_arm_instrument_satin"/>
-        <geom name="or_bulldog_1_upper_arm_col0" size="0.0018 0.0096" pos="0.0096 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
-        <geom name="or_bulldog_1_upper_arm_col1" size="0.0018 0.0096" pos="0.0288 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
+        <geom name="or_bulldog_1_upper_arm_col0" size="0.0018 0.0096" pos="0.0096 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
+        <geom name="or_bulldog_1_upper_arm_col1" size="0.0018 0.0096" pos="0.0288 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
         <site name="or_bulldog_1_tip_upper" size="0.002" pos="0.048 0 0.0009" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -469,17 +469,17 @@
       <joint name="or_bulldog_2_free" type="free"/>
       <geom name="or_bulldog_2_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_bulldog_2_instrument"/>
       <geom name="or_bulldog_2_instrument_satin" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_bulldog_2_instrument_satin"/>
-      <geom name="or_bulldog_2_col0" size="0.0018 0.0096" pos="-0.0124 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
-      <geom name="or_bulldog_2_col1" size="0.0018 0.0096" pos="0.0068 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
-      <geom name="or_bulldog_2_col2" size="0.0045 0.006" pos="-0.019 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00433526"/>
+      <geom name="or_bulldog_2_col0" size="0.0018 0.0096" pos="-0.0124 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
+      <geom name="or_bulldog_2_col1" size="0.0018 0.0096" pos="0.0068 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00083237"/>
+      <geom name="or_bulldog_2_col2" size="0.0045 0.006" pos="-0.019 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00433526"/>
       <site name="or_bulldog_2_tip" size="0.002" pos="0.026 0 0.0009" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_bulldog_2_grip" size="0.002" pos="-0.0028 0 0.0018" group="4" rgba="0.2 0.9 1 1"/>
       <body name="or_bulldog_2_upper_arm" pos="-0.022 0 0.0018">
         <joint name="or_bulldog_2_jaw" stiffness="0.02" range="0 0.35" springref="-0.08" armature="3e-05" damping="0.01" axis="0 -1 0"/>
         <geom name="or_bulldog_2_upper_arm_instrument" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument" mesh="or_bulldog_2_upper_arm_instrument"/>
         <geom name="or_bulldog_2_upper_arm_instrument_satin" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_instrument_satin" mesh="or_bulldog_2_upper_arm_instrument_satin"/>
-        <geom name="or_bulldog_2_upper_arm_col0" size="0.0018 0.0096" pos="0.0096 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
-        <geom name="or_bulldog_2_upper_arm_col1" size="0.0018 0.0096" pos="0.0288 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
+        <geom name="or_bulldog_2_upper_arm_col0" size="0.0018 0.0096" pos="0.0096 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
+        <geom name="or_bulldog_2_upper_arm_col1" size="0.0018 0.0096" pos="0.0288 0 0.0009" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.003"/>
         <site name="or_bulldog_2_tip_upper" size="0.002" pos="0.048 0 0.0009" group="4" rgba="0.2 0.9 1 1"/>
       </body>
     </body>
@@ -487,7 +487,7 @@
       <joint name="or_lap_1_free" type="free"/>
       <geom name="or_lap_1_lap" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_lap" mesh="or_lap_1_lap"/>
       <geom name="or_lap_1_darkblue" pos="-3.1225e-16 -3.88907e-24 -1.8735e-16" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_darkblue" mesh="or_lap_1_darkblue"/>
-      <geom name="or_lap_1_col0" size="0.0215 0.048" pos="0 0 0.022" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.022"/>
+      <geom name="or_lap_1_col0" size="0.0215 0.048" pos="0 0 0.022" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.022"/>
       <site name="or_lap_1_grip" size="0.002" pos="0 0 0.044" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_lap_1_tip" size="0.002" pos="0.05 0 0.022" group="4" rgba="0.2 0.9 1 1"/>
     </body>
@@ -495,16 +495,16 @@
       <joint name="or_lap_2_free" type="free"/>
       <geom name="or_lap_2_lap" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_lap" mesh="or_lap_2_lap"/>
       <geom name="or_lap_2_darkblue" pos="-3.1225e-16 -3.88907e-24 -1.8735e-16" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_darkblue" mesh="or_lap_2_darkblue"/>
-      <geom name="or_lap_2_col0" size="0.0215 0.048" pos="0 0 0.022" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.022"/>
+      <geom name="or_lap_2_col0" size="0.0215 0.048" pos="0 0 0.022" quat="0.707107 0 -0.707107 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.022"/>
       <site name="or_lap_2_grip" size="0.002" pos="0 0 0.044" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_lap_2_tip" size="0.002" pos="0.05 0 0.022" group="4" rgba="0.2 0.9 1 1"/>
     </body>
     <body name="or_gauze" pos="1.84 0.16 0.9204">
       <joint name="or_gauze_free" type="free"/>
       <geom name="or_gauze_lap" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" density="0" material="or_mat_lap" mesh="or_gauze_lap"/>
-      <geom name="or_gauze_col0" size="0.0045 0.045" pos="-0.03 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00333333"/>
-      <geom name="or_gauze_col1" size="0.0045 0.045" pos="0 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00333333"/>
-      <geom name="or_gauze_col2" size="0.0045 0.045" pos="0.03 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="5" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00333333"/>
+      <geom name="or_gauze_col0" size="0.0045 0.045" pos="-0.03 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00333333"/>
+      <geom name="or_gauze_col1" size="0.0045 0.045" pos="0 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00333333"/>
+      <geom name="or_gauze_col2" size="0.0045 0.045" pos="0.03 0 0.0045" quat="0.707107 0.707107 0 0" type="capsule" contype="3" conaffinity="3" condim="4" group="4" friction="0.8 0.01 0.0005" rgba="0.9 0.5 0.2 0" mass="0.00333333"/>
       <site name="or_gauze_grip" size="0.002" pos="0 0 0.009" group="4" rgba="0.2 0.9 1 1"/>
       <site name="or_gauze_tip" size="0.002" pos="0.05 0 0.0045" group="4" rgba="0.2 0.9 1 1"/>
     </body>
@@ -588,7 +588,7 @@
       <geom name="or_mayo_towel" pos="-3.33067e-15 -2.63678e-16 -5.77316e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_towel" mesh="or_mayo_towel"/>
       <geom name="or_mayo_stand_18" size="0.144 0.0012 0.0003" pos="0.62 -0.03 1.0881" type="box" contype="0" conaffinity="0" material="or_mat_drape_fabric"/>
       <geom name="or_mayo_stand_19" size="0.144 0.0012 0.0003" pos="0.62 0.13 1.0881" type="box" contype="0" conaffinity="0" material="or_mat_drape_fabric"/>
-      <geom name="or_mayo_collision" size="0.16 0.24 0.01" pos="0.62 0.05 1.078" type="box" contype="3" conaffinity="3" group="5" rgba="0.3 0.8 0.3 0"/>
+      <geom name="or_mayo_collision" size="0.16 0.24 0.01" pos="0.62 0.05 1.078" type="box" contype="3" conaffinity="3" group="4" rgba="0.3 0.8 0.3 0"/>
       <geom name="or_mayo_stand_21" size="0.01 0.004 0.003" pos="0.545 -0.156 1.1085" type="box" contype="0" conaffinity="0" material="or_mat_red"/>
       <geom name="or_mayo_stand_26" size="0.01 0.004 0.003" pos="0.545 -0.11 1.1085" type="box" contype="0" conaffinity="0" material="or_mat_yellow"/>
       <geom name="or_mayo_stand_30" size="0.03 0.021 0.0015" pos="0.57 0.185 1.0896" type="box" contype="0" conaffinity="0" material="or_mat_blue"/>
@@ -610,7 +610,7 @@
       <geom name="or_back_table_mesh_darkgrey_noshadow" pos="-1.33227e-14 -4.66294e-15 -6.66134e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" castshadow="false" material="or_mat_darkgrey" mesh="or_back_table_mesh_darkgrey_noshadow"/>
       <geom name="or_back_table_mesh_cable" pos="-1.5099e-14 -1.13798e-15 -6.32827e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_cable" mesh="or_back_table_mesh_cable"/>
       <geom name="or_back_table_drape" pos="-1.06581e-14 -2.91434e-16 -2.9976e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_drape_fabric" mesh="or_back_table_drape"/>
-      <geom name="or_back_table_collision" size="0.375 0.75 0.02" pos="2 0.05 0.9" type="box" contype="3" conaffinity="3" group="5" rgba="0.3 0.8 0.3 0"/>
+      <geom name="or_back_table_collision" size="0.375 0.75 0.02" pos="2 0.05 0.9" type="box" contype="3" conaffinity="3" group="4" rgba="0.3 0.8 0.3 0"/>
       <geom name="or_back_table_basin_0" pos="-1.86517e-14 4.05231e-15 -7.99361e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_steel" mesh="or_back_table_basin_0"/>
       <geom name="or_back_table_basin_1" pos="-1.77636e-14 6.38378e-16 -7.54952e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_steel" mesh="or_back_table_basin_1"/>
       <geom name="or_back_table_70" size="0.13 0.002" pos="2.2 -0.48 0.965" type="cylinder" contype="0" conaffinity="0" material="or_mat_fluid"/>
@@ -631,7 +631,7 @@
       <geom name="or_step_platform_mesh_rubber" pos="8.04912e-16 4.996e-15 -1.16573e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_rubber" mesh="or_step_platform_mesh_rubber"/>
       <geom name="or_step_platform_mesh_darkgrey" pos="8.04912e-16 4.996e-15 -1.19349e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_darkgrey" mesh="or_step_platform_mesh_darkgrey"/>
       <geom name="or_step_platform_mesh_yellow" pos="8.04912e-16 4.996e-15 -2.39392e-16" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_yellow" mesh="or_step_platform_mesh_yellow"/>
-      <geom name="or_step_platform_collision" size="0.3 0.2 0.075" pos="-0.1 -0.62 0.075" type="box" contype="3" conaffinity="3" group="5" rgba="0.3 0.8 0.3 0"/>
+      <geom name="or_step_platform_collision" size="0.3 0.2 0.075" pos="-0.1 -0.62 0.075" type="box" contype="3" conaffinity="3" group="4" rgba="0.3 0.8 0.3 0"/>
     </body>
     <body name="or_heart_lung_machine" pos="1.35 2.05 0" quat="0.981956 0 0 -0.189108">
       <geom name="or_heart_lung_machine_mesh_lightgrey" pos="-1.64799e-17 8.32667e-16 -3.88578e-15" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" material="or_mat_lightgrey" mesh="or_heart_lung_machine_mesh_lightgrey"/>

@@ -1,18 +1,26 @@
 """Operating-room controls for the hand simulator (needs only mujoco + numpy).
 
 Exported as environment/or_controls.py (source: surgery-sim/surgical_env/sim_controls.py; edit
-there). or_scene.py / surgical_suturing_guided.py use it like this:
+there). The hook in the simulator is kept small and uses no simulator internals beyond the station,
+so it keeps working while the hand / AI code changes:
 
     controls = EnvironmentControls(model, data)          # after building the model
-    ...each frame of the viewer loop:
-    actions = controls.frame(viewer, now)                # buttons, camera, heart, animations
-    with controls.heart_at_home(viewer):                 # tissue queries + drawing on the heart
-        ...station.update(...); draw_user(...)
-    controls.follow_heart(viewer.user_scn, *station.drawn)
+    ...each frame of the viewer loop, before the keys are handled:
+    pressed += controls.step(viewer, now, station)       # buttons, camera, heart, animations
+    if controls.new_heart:                               # "Load heart (STL)": reopen with it
+        return controls.new_heart, site
+    with controls.heart_at_home(viewer):                 # tissue queries (cut, stitch, bypass)
+        ...station.update(...)
+    ...after drawing into viewer.user_scn (inside the viewer lock):
+    controls.follow_heart(viewer.user_scn)               # wounds / stitches move with a lifted heart
+
+or_scene.make_tissue() builds a new site inside heart_home(), so starting over or switching site
+works while the heart is lifted out.
 
 What it does:
 - Buttons in the viewer's Equality panel (welds between two bodies, never simulated):
-  "Reset view", "Reset hands", "Reset instruments", "Lift heart out" (on/off), "Load heart (STL)".
+  "Reset view", "Reset instruments", "Lift heart out" (on/off), "Load heart (STL)" (the simulator
+  has its own "Reset hands").
   frame() returns the names of the buttons pressed this frame.
 - The free camera never leaves the room (numeric or_room_box).
 - The heart (a mocap body): double-click it to select it - it lifts out of the chest - then
@@ -36,12 +44,33 @@ from pathlib import Path
 import mujoco as mj
 import numpy as np
 
-BUTTONS = ("Reset view", "Reset hands", "Reset instruments", "Lift heart out", "Load heart (STL)")
+# (Reset hands is the simulator's own button.)
+BUTTONS = ("Reset view", "Reset instruments", "Lift heart out", "Load heart (STL)")
 LIFT_BUTTON = "Lift heart out"
 LIFT = np.array([0.0, -0.04, 0.20])      # where "lift out" takes the heart (from its place in the chest)
 LIFT_SECONDS = 0.8
 PUMP_RPM = 34.0
+HIDDEN_GROUP = 4                         # geom group the simulator never shows
 CAMERA_MARGIN = 0.15                     # keep the eye this far from walls, floor and ceiling
+RESET_VIEW_KEY = ord("0")                # the simulator's own keys (used as fallbacks too)
+PARK_KEY = ord("C")
+# Materials of what the simulator draws on the tissue: these follow a lifted heart.
+TISSUE_MATERIALS = ("wound", "lip", "heart_lip", "blood", "thread", "marker", "target", "graft",
+                    "graft_perfused")
+FOLLOW_RADIUS = 0.16                     # only tissue drawings this close to the heart follow it
+_ACTIVE = None                           # the controls of the open viewer (see heart_home)
+
+
+@contextlib.contextmanager
+def heart_home():
+    """While inside, the heart is in its place in the chest (no viewer lock taken): the simulator
+    builds a new site inside this, so its ray-cast targets are right even with the heart lifted out."""
+    controls = _ACTIVE
+    if controls is None:
+        yield
+        return
+    with controls._at_home():
+        yield
 
 
 def button_xml(body1: str, body2: str) -> str:
@@ -114,6 +143,48 @@ class EnvironmentControls:
                 self.rollers.append((m.body_mocapid[b], m.body_quat[b].copy(), int(name.split("_")[-1])))
         self.uploads = queue.SimpleQueue()       # update_texture blocks until drawn: do it off the loop
         self.viewer = None
+        self.new_heart = None                    # file chosen with "Load heart (STL)"
+        self.tissue_materials = {i for i in (mj.mj_name2id(m, mj.mjtObj.mjOBJ_MATERIAL, name)
+                                             for name in TISSUE_MATERIALS) if i >= 0}
+        heart_geoms = [g for g in range(m.ngeom) if self.heart >= 0 and m.geom_bodyid[g] == self.heart]
+        self.heart_group = int(m.geom_group[heart_geoms[0]]) if heart_geoms else -1
+        self._homes = {}                         # id(station) -> tool rest poses when it was new
+        global _ACTIVE
+        _ACTIVE = self
+
+    # --- the simulator's hook -------------------------------------------------------------------
+    def step(self, viewer, now: float, station=None) -> list[int]:
+        """Everything the room does each frame (frame()), and the buttons acted on: returns the
+        simulator keys to add to this frame's key presses (Reset view = its 0 key)."""
+        keys = []
+        if station is not None and id(station) not in self._homes:
+            self._homes = {id(station): _copy_rest(getattr(station, "rest", None))}
+        for name in self.frame(viewer, now):
+            if name == "Reset view":
+                keys.append(RESET_VIEW_KEY)
+            elif name == "Reset instruments":
+                keys += self.reset_tools(station)
+            elif name == "Load heart (STL)":
+                self.new_heart = choose_heart_file()
+                if self.new_heart:
+                    print(f"Loading heart model {self.new_heart}", flush=True)
+        return keys
+
+    def reset_tools(self, station) -> list[int]:
+        """The simulator's instruments back in their trays (the repair stays as it is).
+        Falls back to the simulator's park key (C) if the station looks different."""
+        try:
+            if hasattr(station, "park_all"):
+                station.park_all()
+            else:
+                for hand in station.hands.values():
+                    station.park(hand)
+            home = self._homes.get(id(station))
+            if home is not None:
+                station.rest = _copy_rest(home)
+            return []
+        except Exception:
+            return [PARK_KEY]
 
     # --- per frame ----------------------------------------------------------------------------
     def frame(self, viewer, now: float) -> list[str]:
@@ -224,39 +295,50 @@ class EnvironmentControls:
                     d.mocap_pos[k], d.mocap_quat[k] = self.home
         out = self.heart_out
         for g, group in zip(self.bypass_lines, self.bypass_groups):   # cannulas stay in place: hide them
-            self.model.geom_group[g] = 5 if out else group
+            self.model.geom_group[g] = HIDDEN_GROUP if out else group
 
     @contextlib.contextmanager
     def heart_at_home(self, viewer):
         """Holds the viewer lock; inside, the heart is in its place in the chest, so the simulator's
-        ray-cast tissue (cutting, stitches, bypass) works in heart coordinates; drawing done inside
-        is moved with the heart afterwards by follow_heart()."""
-        with viewer.lock():
-            if not self.heart_out:
-                self.moved = None
-                yield
-                return
-            k = self.heart_mocap
-            pose = self.data.mocap_pos[k].copy(), self.data.mocap_quat[k].copy()
-            self.data.mocap_pos[k], self.data.mocap_quat[k] = self.home
-            mj.mj_kinematics(self.model, self.data)
-            try:
-                yield
-            finally:
-                self.data.mocap_pos[k], self.data.mocap_quat[k] = pose
-                mj.mj_kinematics(self.model, self.data)
-                self.moved = pose
+        ray-cast tissue (cutting, stitches, bypass) works in heart coordinates. What it draws on the
+        tissue is moved with the heart afterwards by follow_heart()."""
+        with viewer.lock(), self._at_home():
+            yield
 
-    def follow_heart(self, scene, start: int, end: int) -> None:
-        """Move user-scene geoms [start, end) (wounds, stitches, graft) from the heart's place in
-        the chest to where it is now."""
-        if getattr(self, "moved", None) is None:
+    @contextlib.contextmanager
+    def _at_home(self):
+        if not self.heart_out:
+            yield
             return
-        pos, quat = self.moved
+        k = self.heart_mocap
+        pose = self.data.mocap_pos[k].copy(), self.data.mocap_quat[k].copy()
+        self.data.mocap_pos[k], self.data.mocap_quat[k] = self.home
+        mj.mj_kinematics(self.model, self.data)
+        try:
+            yield
+        finally:
+            self.data.mocap_pos[k], self.data.mocap_quat[k] = pose
+            mj.mj_kinematics(self.model, self.data)
+
+    def follow_heart(self, scene, start: int | None = None, end: int | None = None) -> None:
+        """Move the tissue drawings on the heart (wounds, blood, stitches, graft: user-scene geoms
+        with a tissue material near the heart's place in the chest; or the geoms [start, end)) to
+        where the heart is now. Nothing happens while the heart is in the chest or hidden."""
+        if not self.heart_out:
+            return
+        if self.viewer is not None and self.heart_group >= 0 and not self.viewer.opt.geomgroup[self.heart_group]:
+            return
+        k = self.heart_mocap
+        pos, quat = self.data.mocap_pos[k].copy(), self.data.mocap_quat[k].copy()
         home_pos, home_quat = self.home
         conj = home_quat * np.array([1, -1, -1, -1])
         rot = _quat_mat(_quat_mul(quat, conj))
-        for i in range(start, min(end, scene.ngeom)):
+        if start is None:
+            chosen = [i for i in range(scene.ngeom) if scene.geoms[i].matid in self.tissue_materials
+                      and np.linalg.norm(np.array(scene.geoms[i].pos) - home_pos) < FOLLOW_RADIUS]
+        else:
+            chosen = range(start, min(end, scene.ngeom))
+        for i in chosen:
             g = scene.geoms[i]
             g.pos[:] = pos + rot @ (np.array(g.pos) - home_pos)
             g.mat[:] = rot @ np.array(g.mat).reshape(3, 3)
@@ -297,6 +379,12 @@ class EnvironmentControls:
             mj.mju_mulQuat(self.data.mocap_quat[mocap], base,
                            np.array([np.cos(angle / 2), 0, 0, np.sin(angle / 2)]))
         return changed
+
+
+def _copy_rest(rest):
+    if rest is None:
+        return None
+    return [tuple(np.array(v, float).copy() for v in pose) for pose in rest]
 
 
 # --- loading a heart model --------------------------------------------------------------------

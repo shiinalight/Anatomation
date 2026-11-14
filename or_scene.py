@@ -21,7 +21,7 @@ from pathlib import Path
 import mujoco as mj
 import numpy as np
 
-from environment.or_controls import button_xml, heart_obj, obj_center
+from environment.or_controls import button_xml, heart_home, heart_obj, obj_center
 
 # --- Layout shared with the gameplay code (metres, world frame, z up) ---------------
 # Heart model (NIH 3D), loaded from its own MJCF so its meshes keep their relative paths.
@@ -186,6 +186,19 @@ class Tissue:
             return None
         return np.array([xy[0], xy[1], z]) + self.normal(*xy[:2])*lift
 
+    # Surface queries including vessels; plain tissue has none (HeartTissue overrides these).
+    def any_height(self, x, y):
+        return self.height(x, y)
+
+    def any_normal(self, x, y):
+        return self.normal(x, y)
+
+    def any_point(self, xy, lift=0.0):
+        return self.point(xy, lift)
+
+    def vessel_top(self, x, y):
+        return None
+
     def rest_height(self, x, y):
         """Height of whatever a set-down tool would rest on (tissue, trays, drapes, table)."""
         z, _ = self.probe(x, y)
@@ -233,13 +246,15 @@ class SkinTissue(Tissue):
 class HeartTissue(Tissue):
     """The heart, queried by ray-casting its compiled meshes."""
 
-    def __init__(self, model, data, site):
+    def __init__(self, model, data, site, laceration=None):
         super().__init__(model, data, site)
+        if laceration is None:
+            laceration = site.procedure is None
         self.heart_only = np.zeros(6, np.uint8)
         self.heart_only[HEART_GROUP] = 1
         self.muscle = {mj.mj_name2id(model, mj.mjtObj.mjOBJ_GEOM, name)
                        for name in HEART_GEOMS if HEART_GEOMS[name] == HEART_MUSCLE_MATERIAL}
-        self.wound = self._laceration() if site.procedure is None else []
+        self.wound = self._laceration() if laceration else []
 
     def height(self, x, y):
         """Heart-muscle surface height at (x, y); None over vessels or off the heart."""
@@ -294,8 +309,14 @@ class HeartTissue(Tissue):
         return geoms
 
 
-def make_tissue(model, data, site):
-    return (SkinTissue if site.name == "skin" else HeartTissue)(model, data, site)
+def make_tissue(model, data, site, task=None):
+    """The tissue of `site`; on the heart, the laceration is shown only for suturing and
+    free practice (`task`), not for an incision or the bypass."""
+    with heart_home():                         # a lifted heart is put back while the site is built
+        if site.name == "skin":
+            return SkinTissue(model, data, site)
+        laceration = None if task is None else task in ("suture", "free")
+        return HeartTissue(model, data, site, laceration)
 
 
 def _tangent(n):
@@ -485,6 +506,12 @@ def _scene_xml():
     # and the opened chest around the heart in group 3)
     add('<body name="site_switch_a"/>')    # anchors for the site switch (see SITE_SWITCH)
     add('<body name="site_switch_b"/>')
+    # Double-click targets for the hands (see PICK_GROUP): nearly invisible spheres that the
+    # simulator keeps on each palm.
+    for side in ("left", "right"):
+        add(f'<body name="pick_{side}" mocap="true" pos="0 0 -5"><geom type="sphere" size=".045" '
+            f'group="{PICK_GROUP}" rgba=".5 .5 .5 .002" contype="0" conaffinity="0"/></body>')
+
     # Mayo stands: stainless trays on a cantilever arm, post and wheeled base behind the table.
     for (tx, ty), (hx, hy) in TRAYS:
         z = TRAY_TOP
@@ -591,11 +618,15 @@ def _scene_xml():
   </asset>
   <default><geom contype="0" conaffinity="0"/></default>
   <equality>
-    <weld name="Skin" body1="site_switch_a" body2="site_switch_b"/>
-    <weld name="Heart" body1="site_switch_a" body2="site_switch_b" active="false"/>
-    <weld name="Bypass" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Procedures" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Reset hands" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Both hands" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
-    <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
+    <weld name="Key guide" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Autopilot" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="AI Assistant" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="AI Voice" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Gemma review" body1="site_switch_a" body2="site_switch_b" active="false"/>
     {button_xml("site_switch_a", "site_switch_b")}
   </equality>
   <worldbody>
@@ -612,8 +643,15 @@ def build_model():
 
 
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart", "bypass": "Bypass"}   # site -> button (equality) name
+PROCEDURES_BUTTON = "Procedures"          # one-shot: open the procedure dropdown window
+RESET_HANDS_BUTTON = "Reset hands"         # one-shot: hands and camera back to the surgeon view
+BOTH_HANDS_BUTTON = "Both hands"           # toggle: arrows and Q/E move both hands together
 CLEAR_BUTTON = "Clear repair"
 GUIDE_BUTTON = "Key guide"
+AUTOPILOT_BUTTON = "Autopilot"               # toggle: replay the best recorded attempt
+ASSISTANT_BUTTON = "AI Assistant"          # one-shot: open the assistant window
+VOICE_BUTTON = "AI Voice"                  # toggle: microphone for spoken questions
+REVIEW_BUTTON = "Gemma review"             # one-shot: Gemma debrief of the scene and attempt
 
 
 class PanelButton:
@@ -629,6 +667,29 @@ class PanelButton:
             return False
         self.data.eq_active[self.id] = False
         return True
+
+
+class PanelToggle:
+    """An on/off button in the viewer's Equality panel. changed() reports clicks;
+    set() shows a state chosen by the program."""
+
+    def __init__(self, model, data, name):
+        self.data, self.id = data, model.equality(name).id
+        self.data.eq_active[self.id] = False
+        self.state = False
+
+    @property
+    def on(self):
+        return bool(self.data.eq_active[self.id])
+
+    def changed(self):
+        if self.on == self.state:
+            return False
+        self.state = self.on
+        return True
+
+    def set(self, on):
+        self.data.eq_active[self.id] = self.state = bool(on)
 
 
 class SiteSwitch:
@@ -657,9 +718,19 @@ class SiteSwitch:
         return turned_on[0] if turned_on else None
 
 
+PICK_GROUP = 5     # hand pick spheres: shown (selectable) in the viewer, never hit by tissue probes
+
+
+def view_groups(site):
+    """Geom groups the viewer shows for `site`: the site's own plus the hand pick spheres."""
+    groups = list(site.groups)
+    groups[PICK_GROUP] = 1
+    return groups
+
+
 def show_site(model, option, site):
     """Show `site` in a viewer whose visual options are `option` (an MjvOption)."""
-    option.geomgroup[:] = site.groups
+    option.geomgroup[:] = view_groups(site)
     model.mat_reflectance[model.material("floor").id] = site.floor_reflectance
 
 
