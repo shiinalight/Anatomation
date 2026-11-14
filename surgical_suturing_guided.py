@@ -14,7 +14,8 @@ import mujoco.viewer
 import numpy as np
 
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
-                      add_capsule, add_geom, build_model, draw_monitor, make_tissue, surface_strip)
+                      add_capsule, add_geom, build_model, button_body, draw_monitor,
+                      draw_site_console, make_tissue, show_site, surface_strip)
 
 SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
 ANCHOR = np.array([0, -0.10, 1.015])
@@ -737,18 +738,24 @@ class CuttingStation:
                 draw_capsule(scene, knot, knot + np.array([length, length*spread, .0004]), .0006, "thread")
 
 
+SWITCH_SITE = ord("P")
+
+
 def draw_user(scene, points, station, now):
-    """Everything that moves: glove, instruments, wounds, sutures and the patient monitor."""
+    """Everything that moves: glove, instruments, wounds, sutures, the patient monitor
+    and the procedure selector."""
     draw_hand(scene, points)
     station.draw(scene, now)
     draw_monitor(scene, now)
+    draw_site_console(scene, station.site.name)
 
 
 def display(frames, preview, site):
-    model = build_model(site)
+    model = build_model()
     Look.model = model
     data = mj.MjData(model)
     mj.mj_forward(model, data)
+    buttons = {model.body(button_body(name)).id: name for name in SITES}
     heading = Heading()
     last_status = None
     keys = SimpleQueue()
@@ -762,11 +769,13 @@ def display(frames, preview, site):
           "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan,\n"
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
-          "M mutes or unmutes the OR sounds.",
+          "M mutes or unmutes the OR sounds.\n"
+          "Switch site: double-click SKIN or HEART on the console at the front right, or press P.",
           flush=True)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
         with viewer.lock():
+            show_site(model, viewer.opt, site)
             bench_view(model, data, viewer.cam, site.zoom)
         overlay = getattr(viewer, "set_texts", None)
         next_overlay = 0.0
@@ -783,6 +792,27 @@ def display(frames, preview, site):
                 held_keys.press(code, now)
                 pressed.append(code)
             held = list(held_keys.moves(now, dt))
+
+            # Site switching: double-click a console button (selects its body) or press P.
+            choice = None
+            with viewer.lock():
+                selected = viewer.perturb.select
+                if selected in buttons:
+                    choice = buttons[selected]
+                    viewer.perturb.select = 0
+            if SWITCH_SITE in pressed:
+                pressed = [code for code in pressed if code != SWITCH_SITE]
+                choice = "heart" if station.site.name == "skin" else "skin"
+            if choice is not None and choice != station.site.name:
+                site = SITES[choice]
+                station.park()
+                station = CuttingStation(make_tissue(model, data, site))
+                with viewer.lock():
+                    show_site(model, viewer.opt, site)
+                    bench_view(model, data, viewer.cam, site.zoom)
+                sounds.play("switch")
+                print(f"Operating site: {site.name}", flush=True)
+
             if ord("M") in pressed:
                 sounds.muted = not sounds.muted
                 pressed = [code for code in pressed if code != ord("M")]

@@ -15,7 +15,9 @@ Try it without a glove:
 
     mjpython surgical_suturing_guided.py --preview
 
-Choose what to operate on with `--site` (works with or without `--preview`):
+Switch between skin and heart inside the simulator: double-click **SKIN** or **HEART** on
+the console at the front right of the table (or press **P**). `--site` picks where to
+start (works with or without `--preview`):
 
     mjpython surgical_suturing_guided.py --site skin     # skin pad (default)
     mjpython surgical_suturing_guided.py --site heart    # heart in an open chest
@@ -42,6 +44,7 @@ Then launch the simulator from this directory:
 | Camera | Two-finger scroll to zoom, left-drag to orbit, right-drag to pan, double-right-click a spot to zoom around it, 0 resets the view |
 | Glove | H recalibrates: rest your hand palm-down, fingers toward the monitor, then press H |
 | Sound | M mutes or unmutes the OR sounds (macOS) |
+| Operating site | Double-click SKIN or HEART on the console, or press P |
 
 ## Operating sites
 

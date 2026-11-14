@@ -63,6 +63,7 @@ class Site:
     zoom: float               # start view distance relative to the bench camera
     lip_material: str
     floor_reflectance: float
+    groups: tuple             # visible geom groups: 0 room, 1 skin site, 2 heart, 3 open chest
 
     @property
     def direction(self):
@@ -93,7 +94,7 @@ SITES = {
     "skin": Site("skin", "pad", angle=0, half=.074, bite_min=.006, bite_guide=.014, bite_max=.030,
                  stitch_spacing=.032, stitch_slots=5, exit_tolerance=.027, along_limit=.103,
                  grip_side=.025, grip_along=.103, forceps_target=(-.025, -.012), tail_length=.012,
-                 zoom=1.0, lip_material="lip", floor_reflectance=.07),
+                 zoom=1.0, lip_material="lip", floor_reflectance=.07, groups=(1, 1, 0, 0, 0, 0)),
     # 3 cm laceration on the anterolateral left-ventricular wall, placed by ray-casting the
     # model where it keeps >= 7 mm from every coronary ridge and great vessel, including
     # the full width of the stitch bites.
@@ -101,7 +102,7 @@ SITES = {
                   bite_max=.010, stitch_spacing=.006, stitch_slots=5, exit_tolerance=.004,
                   along_limit=.018, grip_side=.012, grip_along=.021,
                   forceps_target=(-.005, -.006), tail_length=.007, zoom=.7,
-                  lip_material="heart_lip", floor_reflectance=0),
+                  lip_material="heart_lip", floor_reflectance=0, groups=(1, 0, 1, 1, 0, 0)),
 }
 
 TRAY_TOP = 1.012                    # Mayo-stand tray floors, above the draped patient
@@ -112,6 +113,23 @@ TRAYS = (                           # (centre xy, half size xy)
 TABLE_MIN = np.array([-.54, -.28])  # where a dropped tool may come to rest
 TABLE_MAX = np.array([.54, .44])
 TABLE_TOP = .812                    # drape over the OR table mattress
+
+# Procedure selector: a touch panel on an arm, facing the surgeon, with one button per
+# site. Double-clicking a button in the viewer selects its body, which switches site.
+CONSOLE_CENTER = np.array([.19, -.115, .995])
+_facing = np.array([.28, -.62, 1.43]) - CONSOLE_CENTER
+CONSOLE_NORMAL = _facing / np.linalg.norm(_facing)
+CONSOLE_RIGHT = np.cross([0, 0, 1], CONSOLE_NORMAL)
+CONSOLE_RIGHT /= np.linalg.norm(CONSOLE_RIGHT)
+CONSOLE_UP = np.cross(CONSOLE_NORMAL, CONSOLE_RIGHT)
+CONSOLE_HALF = np.array([.085, .045])
+BUTTON_HALF = np.array([.037, .028])
+SITE_BUTTONS = {"skin": -.042, "heart": .042}     # site -> offset along CONSOLE_RIGHT
+
+
+def button_body(name):
+    return f"site_button_{name}"
+
 
 MONITOR_CENTER = np.array([.10, 1.12, 1.00])
 MONITOR_HALF = np.array([.20, .125])   # screen half width / height
@@ -137,7 +155,7 @@ class Tissue:
     def __init__(self, model, data, site):
         self.model, self.data, self.site = model, data, site
         mj.mj_forward(model, data)
-        self.visible = np.array([1, 1, 1, 0, 0, 0], np.uint8)
+        self.visible = np.array(site.groups, np.uint8)   # only this site's scene
         self._id = np.zeros(1, np.int32)
         self.wound = []       # extra static geometry drawn each frame (see HeartTissue)
 
@@ -399,7 +417,7 @@ def _lookat(position, target):
     return d / np.linalg.norm(d)
 
 
-def _scene_xml(site):
+def _scene_xml():
     main_light = np.array([-.30, .26, 1.86])
     main_dir = _lookat(main_light, [*INCISION_CENTER, WORK_TOP])
     side_light = np.array([.46, -.18, 1.92])
@@ -440,7 +458,10 @@ def _scene_xml(site):
     for y in (-.235, .355):
         add(f'<geom type="box" pos=".05 {y} .58" size="1.12 .004 .24" material="drape"/>')
     add('<geom type="box" pos="1.172 .06 .58" size=".004 .30 .24" material="drape"/>')
-    (_open_chest if site.name == "heart" else _skin_window)(add)
+    # Both operating sites are in the model; the viewer shows one at a time by group.
+    _skin_window(lambda line: add(line.replace("<geom ", '<geom group="1" ', 1)))
+    _open_chest(lambda line: add(line.replace("<geom ", '<geom group="3" ', 1)))
+    _site_console(add)
     add('<geom type="ellipsoid" pos=".62 .06 .815" size=".56 .24 .075" material="drape"/>')
     add('<geom type="ellipsoid" pos="1.10 .00 .845" size=".04 .05 .06" material="drape"/>')
     add('<geom type="ellipsoid" pos="1.10 .12 .845" size=".04 .05 .06" material="drape"/>')
@@ -524,7 +545,7 @@ def _scene_xml(site):
     add('<geom type="box" pos="1.12 .3 .70" size=".006 .77 .21" material="drape"/>')
     add('<geom type="cylinder" pos=".95 -.7 .22" size=".17 .22" material="satin"/>')
 
-    heart_lines, heart_body, _ = _heart_xml() if site.name == "heart" else ([], "", {})
+    heart_lines, heart_body, _ = _heart_xml()
     heart_assets = "\n    ".join(heart_lines)
     lights = f"""
     <light name="surgical_main" type="spot" pos="{_fmt(main_light)}" dir="{_fmt(main_dir)}"
@@ -555,7 +576,7 @@ def _scene_xml(site):
     <texture name="skin" type="2d" file="skin.png"/>
     {heart_assets}
     <material name="floor" texture="floor" texuniform="true" texrepeat=".5 .5"
-              specular=".35" shininess=".35" reflectance="{site.floor_reflectance}"/>
+              specular=".35" shininess=".35" reflectance=".07"/>
     <material name="tile" texture="tile" texuniform="true" texrepeat="1.25 1.25"
               specular=".45" shininess=".7"/>
     <material name="ceiling" texture="ceiling" texuniform="true" texrepeat="1.66 1.66" specular=".05"/>
@@ -591,6 +612,10 @@ def _scene_xml(site):
     <material name="sternum" rgba=".80 .66 .45 1" specular=".3" shininess=".4"/>
     <material name="sponge" rgba=".93 .92 .88 1" specular=".05"/>
     <material name="target" rgba=".95 .93 .85 1" specular=".2"/>
+    <material name="button_skin" rgba=".78 .52 .38 1" specular=".5" shininess=".7"/>
+    <material name="button_heart" rgba=".72 .12 .14 1" specular=".5" shininess=".7"/>
+    <material name="button_label" rgba="1 1 1 1" emission=".8"/>
+    <material name="button_active" rgba=".3 1 .45 1" emission="1"/>
     <material name="wound" rgba=".36 .03 .04 1" specular=".95" shininess=".95"/>
     <material name="blood" rgba=".46 .02 .03 1" specular="1" shininess="1"/>
     <material name="thread" rgba=".36 .20 .62 1" specular=".5" shininess=".6"/>
@@ -661,9 +686,34 @@ def _open_chest(add):
     add('<geom type="box" pos=".105 -.185 .975" size=".004 .03 .004" material="satin"/>')
 
 
-def build_model(site):
-    heart_files = _heart_xml()[2] if site.name == "heart" else {}
-    return mj.MjModel.from_xml_string(_scene_xml(site), {**_textures(), **heart_files})
+def _site_console(add):
+    c, n, r, u = CONSOLE_CENTER, CONSOLE_NORMAL, CONSOLE_RIGHT, CONSOLE_UP
+    axes = f'xyaxes="{_fmt(r)} {_fmt(u)}"'
+    add(f'<geom type="box" pos="{_fmt(c - n*.006)}" {axes} '
+        f'size="{CONSOLE_HALF[0]} {CONSOLE_HALF[1]} .006" material="plastic_dark"/>')
+    add(f'<geom type="box" pos="{_fmt(c - n*.0005)}" {axes} '
+        f'size="{CONSOLE_HALF[0] - .004} {CONSOLE_HALF[1] - .004} .0005" material="screen"/>')
+    mount = c - n*.012 - u*.02
+    add(f'<geom type="capsule" fromto="{_fmt(mount)} {_fmt(mount - u*.12 + n*.03)}" size=".007" '
+        f'material="satin"/>')
+    add(f'<geom type="capsule" fromto="{_fmt(mount - u*.12 + n*.03)} .19 -.215 .81" size=".007" '
+        f'material="satin"/>')
+    for name, offset in SITE_BUTTONS.items():
+        centre = c + r*offset - u*.004 + n*.003
+        add(f'<body name="{button_body(name)}" pos="{_fmt(centre)}" {axes}>'
+            f'<geom type="box" size="{BUTTON_HALF[0]} {BUTTON_HALF[1]} .003" '
+            f'material="button_{name}"/></body>')
+
+
+def build_model():
+    """The operating room with both sites; `show_site` picks which one is visible."""
+    return mj.MjModel.from_xml_string(_scene_xml(), {**_textures(), **_heart_xml()[2]})
+
+
+def show_site(model, option, site):
+    """Show `site` in a viewer whose visual options are `option` (an MjvOption)."""
+    option.geomgroup[:] = site.groups
+    model.mat_reflectance[model.material("floor").id] = site.floor_reflectance
 
 
 # --- Drawing helpers for per-frame (user scene) geometry ----------------------------
@@ -754,6 +804,40 @@ def _digits(scene, text, u, v, height, material):
             add_capsule(scene, start, end, .0016, material)
 
 
+_LETTERS = {
+    "S": [((1, 1), (0, 1)), ((0, 1), (0, .5)), ((0, .5), (1, .5)), ((1, .5), (1, 0)), ((1, 0), (0, 0))],
+    "K": [((0, 0), (0, 1)), ((1, 1), (0, .45)), ((.3, .62), (1, 0))],
+    "I": [((.5, 0), (.5, 1))],
+    "N": [((0, 0), (0, 1)), ((0, 1), (1, 0)), ((1, 0), (1, 1))],
+    "H": [((0, 0), (0, 1)), ((1, 0), (1, 1)), ((0, .5), (1, .5))],
+    "E": [((1, 1), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((0, .5), (.8, .5))],
+    "A": [((0, 0), (.5, 1)), ((.5, 1), (1, 0)), ((.22, .42), (.78, .42))],
+    "R": [((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, .5)), ((1, .5), (0, .5)), ((.35, .5), (1, 0))],
+    "T": [((0, 1), (1, 1)), ((.5, 1), (.5, 0))],
+}
+
+
+def draw_site_console(scene, active):
+    """Button labels and a glowing frame around the active site's button."""
+    n, r, u = CONSOLE_NORMAL, CONSOLE_RIGHT, CONSOLE_UP
+    height, width, gap = .016, .0095, .0045
+    for name, offset in SITE_BUTTONS.items():
+        centre = CONSOLE_CENTER + r*offset - u*.004 + n*.0065
+        text = name.upper()
+        x0 = -(len(text)*width + (len(text) - 1)*gap)/2
+        for i, letter in enumerate(text):
+            left = x0 + i*(width + gap)
+            for (a, b), (c, d) in _LETTERS[letter]:
+                start = centre + r*(left + a*width) + u*((b - .5)*height)
+                end = centre + r*(left + c*width) + u*((d - .5)*height)
+                add_capsule(scene, start, end, .0011, "button_label")
+        if name == active:
+            hx, hy = BUTTON_HALF + .003
+            corners = [centre + r*sx*hx + u*sy*hy for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1), (-1, -1))]
+            for a, b in zip(corners, corners[1:]):
+                add_capsule(scene, a, b, .0016, "button_active")
+
+
 def _ecg(phase):
     """Lead II-like waveform, phase in [0, 1) over one heartbeat."""
     bump = lambda centre, width, amp: amp*np.exp(-((phase - centre)/width)**2)
@@ -792,7 +876,7 @@ def draw_monitor(scene, t):
 class Sounds:
     SYSTEM = Path("/System/Library/Sounds")
     EVENTS = {"pickup": ("Tink", .35), "setdown": ("Bottle", .18), "puncture": ("Pop", .45),
-              "tie": ("Purr", .5), "trim": ("Tink", .5), "incise": ("Frog", .10)}
+              "tie": ("Purr", .5), "trim": ("Tink", .5), "switch": ("Glass", .35)}
 
     def __init__(self):
         self.enabled = sys.platform == "darwin" and shutil.which("afplay") is not None
