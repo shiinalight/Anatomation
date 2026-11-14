@@ -147,8 +147,15 @@ def score(events, times, tips, site):
     """(overall 0-100, tasks): each cut or stitch scored on time, travel, refused actions
     and needle accuracy. The overall score is the mean task score."""
     times = np.asarray(times)
-    targets = {"skin": (45, 40), "heart": (45, 25), "bypass": (40, 20)}   # (s, cm) per stitch
-    seconds, travel_cm = targets.get(site, (45, 30))
+    # Target time (s) and instrument travel (cm) per stitch; a cut gets 60% of the time.
+    if "bypass" in site:
+        seconds, travel_cm = 40, 20
+    elif site.startswith("heart"):
+        seconds, travel_cm = 45, 25
+    elif site.startswith("skin"):
+        seconds, travel_cm = 45, 40
+    else:
+        seconds, travel_cm = 45, 30
     tasks, start = [], 0
     pending = {"rejected": 0, "errors": []}
     for event in events:

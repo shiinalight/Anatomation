@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "training-data"
 TELEMETRY_TOPIC = "surgery-telemetry"
 EVENTS_TOPIC = "surgery-events"
+LEGACY = {"skin": "skin-suture", "heart": "heart-suture", "bypass": "heart-bypass"}   # see procedures.py
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sim_attempts (
@@ -173,7 +174,8 @@ class TrainingStore:
                 s = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if site is None or s.get("site") == site:
+            s["site"] = LEGACY.get(s.get("site"), s.get("site"))   # pre-procedure recordings
+            if site is None or s["site"] == site:
                 out.append(s)
         return sorted(out, key=lambda s: s["started_at"], reverse=True)
 

@@ -15,51 +15,66 @@ import tkinter as tk
 from tkinter import ttk
 
 
-class AssistantClient:
-    """Simulator side: start the window process, update it, and collect typed questions."""
+class WindowProcess:
+    """Simulator side of a Tk window running as its own process: send() a JSON message
+    (repeats are skipped), received() the messages the window sent."""
 
-    def __init__(self):
+    def __init__(self, script):
         import subprocess
         from pathlib import Path
         python = Path(sys.executable)
         plain = python.with_name("python3")       # mjpython's launcher is not needed for Tk
         self.process = subprocess.Popen(
-            [str(plain if plain.exists() else python), str(Path(__file__).resolve())],
+            [str(plain if plain.exists() else python), str(script)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
-        self.questions = queue.SimpleQueue()
+        self.inbox = queue.SimpleQueue()
         self.last = None
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
         for line in self.process.stdout:
             try:
-                question = json.loads(line).get("question")
+                self.inbox.put(json.loads(line))
             except ValueError:
                 continue
-            if question:
-                self.questions.put(question)
 
     @property
     def alive(self):
         return self.process.poll() is None
 
-    def update(self, status, content, busy):
-        message = (status, content, busy)
+    def send(self, message):
         if message == self.last or not self.alive:
             return
         self.last = message
         try:
-            self.process.stdin.write(json.dumps({"status": status, "content": content, "busy": busy}) + "\n")
+            self.process.stdin.write(json.dumps(message) + "\n")
             self.process.stdin.flush()
         except (BrokenPipeError, OSError):
             pass
 
-    def question(self):
-        return None if self.questions.empty() else self.questions.get_nowait()
+    def received(self):
+        while not self.inbox.empty():
+            yield self.inbox.get_nowait()
 
     def close(self):
         if self.alive:
             self.process.terminate()
+
+
+class AssistantClient(WindowProcess):
+    """The assistant window: status, replies and typed questions."""
+
+    def __init__(self):
+        from pathlib import Path
+        super().__init__(Path(__file__).resolve())
+        self.questions = []
+
+    def update(self, status, content, busy):
+        self.send({"status": status, "content": content, "busy": busy})
+
+    def question(self):
+        self.questions += [m["question"] for m in self.received() if m.get("question")]
+        return self.questions.pop(0) if self.questions else None
 
 
 class AssistantWindow:

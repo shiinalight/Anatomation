@@ -178,6 +178,19 @@ class Tissue:
             return None
         return np.array([xy[0], xy[1], z]) + self.normal(*xy[:2])*lift
 
+    # Surface queries including vessels; plain tissue has none (HeartTissue overrides these).
+    def any_height(self, x, y):
+        return self.height(x, y)
+
+    def any_normal(self, x, y):
+        return self.normal(x, y)
+
+    def any_point(self, xy, lift=0.0):
+        return self.point(xy, lift)
+
+    def vessel_top(self, x, y):
+        return None
+
     def rest_height(self, x, y):
         """Height of whatever a set-down tool would rest on (tissue, trays, drapes, table)."""
         z, _ = self.probe(x, y)
@@ -196,13 +209,15 @@ class SkinTissue(Tissue):
 class HeartTissue(Tissue):
     """The heart, queried by ray-casting its compiled meshes."""
 
-    def __init__(self, model, data, site):
+    def __init__(self, model, data, site, laceration=None):
         super().__init__(model, data, site)
+        if laceration is None:
+            laceration = site.procedure is None
         self.heart_only = np.zeros(6, np.uint8)
         self.heart_only[HEART_GROUP] = 1
         self.muscle = {mj.mj_name2id(model, mj.mjtObj.mjOBJ_GEOM, name)
                        for name in HEART_GEOMS if HEART_GEOMS[name] == HEART_MUSCLE_MATERIAL}
-        self.wound = self._laceration() if site.procedure is None else []
+        self.wound = self._laceration() if laceration else []
 
     def height(self, x, y):
         """Heart-muscle surface height at (x, y); None over vessels or off the heart."""
@@ -253,8 +268,13 @@ class HeartTissue(Tissue):
         return geoms
 
 
-def make_tissue(model, data, site):
-    return (SkinTissue if site.name == "skin" else HeartTissue)(model, data, site)
+def make_tissue(model, data, site, task=None):
+    """The tissue of `site`; on the heart, the laceration is shown only for suturing and
+    free practice (`task`), not for an incision or the bypass."""
+    if site.name == "skin":
+        return SkinTissue(model, data, site)
+    laceration = None if task is None else task in ("suture", "free")
+    return HeartTissue(model, data, site, laceration)
 
 
 def _tangent(n):
@@ -639,9 +659,7 @@ def _scene_xml():
   </asset>
   <default><geom contype="0" conaffinity="0"/></default>
   <equality>
-    <weld name="Skin" body1="site_switch_a" body2="site_switch_b"/>
-    <weld name="Heart" body1="site_switch_a" body2="site_switch_b" active="false"/>
-    <weld name="Bypass" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Procedures" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
     <weld name="Autopilot" body1="site_switch_a" body2="site_switch_b" active="false"/>
@@ -711,6 +729,7 @@ def build_model():
 
 
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart", "bypass": "Bypass"}   # site -> button (equality) name
+PROCEDURES_BUTTON = "Procedures"          # one-shot: open the procedure dropdown window
 CLEAR_BUTTON = "Clear repair"
 GUIDE_BUTTON = "Key guide"
 AUTOPILOT_BUTTON = "Autopilot"               # toggle: replay the best recorded attempt

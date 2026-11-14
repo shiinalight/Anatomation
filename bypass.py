@@ -64,8 +64,16 @@ STEPS = (
 
 
 class BypassProcedure:
+    """A guided sequence of cut and suture steps; this class is the coronary bypass, and
+    procedures.IncisionProcedure reuses it for a single marked incision."""
+    title = "Coronary artery bypass"
+    steady_side = STEADY_SIDE      # the other hand holds the tissue this far beside the line
+    steady_reach = .004            # ... within this distance
+    steady_tools = (2,)            # forceps on a vessel wall
+
     def __init__(self, tissue):
         self.tissue = tissue
+        self.steps = STEPS
         self.step = 0
         self.samples = 15
         self.covered = np.zeros(self.samples, bool)
@@ -130,14 +138,14 @@ class BypassProcedure:
     # --- state -----------------------------------------------------------------------
     @property
     def done(self):
-        return self.step >= len(STEPS)
+        return self.step >= len(self.steps)
 
     def current(self):
-        return None if self.done else STEPS[self.step]
+        return None if self.done else self.steps[self.step]
 
     def _advance(self, station):
-        station.note("procedure_step", done=self.step + 1, action=STEPS[self.step][0],
-                     vessel=STEPS[self.step][1].name)
+        station.note("procedure_step", done=self.step + 1, action=self.steps[self.step][0],
+                     vessel=self.steps[self.step][1].name)
         self.step += 1
         self.covered[:] = False
         self.tied = 0
@@ -152,7 +160,7 @@ class BypassProcedure:
     def head(self):
         if self.done:
             return ""
-        return f"Step {self.step + 1}/4 {STEPS[self.step][2].lower()}: "
+        return f"Step {self.step + 1}/{len(self.steps)} {self.steps[self.step][2].lower()}: "
 
     def cutting(self):
         step = self.current()
@@ -182,9 +190,14 @@ class BypassProcedure:
 
     # --- targets for the two hands ---------------------------------------------------
     def steady_point(self):
-        """Where the non-cutting hand holds the vessel wall: beside the middle of the line."""
+        """Where the non-cutting hand holds the tissue: beside the middle of the line."""
         cut = self.current()[1]
-        return self._surface(cut.point(0, STEADY_SIDE))
+        return self._surface(cut.point(0, self.steady_side))
+
+    def steady_ok(self, hand):
+        """True if `hand` (not holding the blade) steadies the tissue for this cut."""
+        return (hand.grip is not None and hand.held in self.steady_tools and
+                np.linalg.norm(hand.grip[:2] - self.steady_point()[:2]) <= self.steady_reach)
 
     def align_blade(self, station, hand):
         """N with the scalpel during a cut step: blade just above the start of the line."""

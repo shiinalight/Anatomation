@@ -17,12 +17,14 @@ import mujoco.viewer
 import numpy as np
 
 from aiven_store import Telemetry, TrainingStore
-from bypass import STITCHES_PER_ANASTOMOSIS, BypassProcedure
+from bypass import STITCHES_PER_ANASTOMOSIS
 import motion_log
+from procedures import DEFAULT, PROCEDURES, from_site, make_procedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
                       surface_strip, ASSISTANT_BUTTON, AUTOPILOT_BUTTON, CLEAR_BUTTON,
-                      GUIDE_BUTTON, REVIEW_BUTTON, VOICE_BUTTON, PanelButton, PanelToggle, SiteSwitch)
+                      GUIDE_BUTTON, PROCEDURES_BUTTON, REVIEW_BUTTON, VOICE_BUTTON, PanelButton,
+                      PanelToggle)
 
 GLOVE_PORT = 12277     # rkk-hand-solver's RGMP v2 output (both gloves, one device each)
 SIDES = ("left", "right")
@@ -503,10 +505,11 @@ class CuttingStation:
     follows whichever hand the next step needs, and Z swaps it by hand.
     """
 
-    def __init__(self, tissue):
+    def __init__(self, tissue, task=None):
         self.tissue = tissue
         self.site = tissue.site
-        self.procedure = BypassProcedure(tissue) if self.site.procedure == "cabg" else None
+        self.task = task or ("bypass" if self.site.procedure == "cabg" else "suture")
+        self.procedure = make_procedure(self.task, tissue)
         self.hands = {side: Hand(side) for side in SIDES}
         self.active = "right"
         self.need = None              # hand the current step needs (keyboard follows it)
@@ -785,7 +788,7 @@ class CuttingStation:
             hand.previous_tip = hand.grip = hand.guide_tip = hand.cut_line = None
             hand.guide_lower_steps = 0
         if self.procedure is not None:
-            self.procedure = BypassProcedure(self.tissue)
+            self.procedure = make_procedure(self.task, self.tissue)
         self.note("reset")
         self.inform("Repair cleared")
 
@@ -851,8 +854,7 @@ class CuttingStation:
         if other.grip is None:
             return False
         if self.procedure is not None and self.procedure.cutting():
-            return (other.held == 2 and
-                    np.linalg.norm(other.grip[:2] - self.procedure.steady_point()[:2]) <= .004)
+            return self.procedure.steady_ok(other)
         if blade.tool_pose is None:
             return False
         tip = self.active_tip(blade)
@@ -1070,6 +1072,8 @@ class CuttingStation:
         head = "" if self.procedure is None else self.procedure.head()
         if self.procedure is not None and self.procedure.done:
             return None, self.procedure.prompt_done()
+        if self.task == "free":
+            return None, "Free practice: any order. Z switches hands; the two-hand rules still apply"
 
         if self.cutting_step():
             blade = self.holder(0) or right
@@ -1077,14 +1081,18 @@ class CuttingStation:
             if blade.held != 0:
                 return blade.side, head + take(blade, 0)
             if self.procedure is not None:
-                if steady.held != 2:
+                tools = self.procedure.steady_tools
+                if steady.held not in tools:
+                    if steady.held is not None and None in tools:
+                        return steady.side, head + f"G set down the {steady.tool} (that hand steadies)"
                     return steady.side, head + take(steady, 2)
                 if not self.steadied(blade):
-                    return steady.side, head + "N then F (forceps hold the vessel wall)"
+                    what = "forceps hold" if steady.held == 2 else "fingers stretch"
+                    return steady.side, head + f"N then F ({what} the tissue beside the line)"
                 if blade.cut_line is None:
                     return blade.side, head + "N (put the blade on the marked line)"
                 if blade.depth <= 0:
-                    return blade.side, head + "E (lower the blade into the vessel)"
+                    return blade.side, head + "E (lower the blade into the tissue)"
                 return blade.side, head + (f"left / right arrows cut along the line "
                                            f"({self.procedure.covered.mean():.0%})")
             if steady.held not in (None, 2):
@@ -1128,10 +1136,76 @@ class CuttingStation:
             return forceps.side, head + f"Q (pull the suture through, {min(max(pulled, 0), 1):.0%})"
         return needle.side, head + f"T (instrument tie, throw {self.throws + 1}/3: {THROWS[self.throws]})"
 
-    def action_prompt(self):
+    def checklist(self):
+        """The procedure's steps for the overlay: [(mark, text)] with mark "x" done,
+        ">" in progress (the first step not done) and " " still to come."""
+        def marks(items, indent=""):
+            out, current = [], False
+            for text, done in items:
+                mark = "x" if done else (" " if current else ">")
+                current = current or not done
+                out.append((mark, indent + text))
+            return out
+
+        right = self.hands["right"]
+        if self.task == "free":
+            return [(" ", "No set order: cut and stitch anywhere"),
+                    (" ", f"{len(self.stitches)} stitches, {len(self.marks)} cut segments")]
+        p = self.procedure
+        if p is not None and p.done:
+            return [("x", p.prompt_done().split(".")[0])]
+
+        def cut_items():
+            blade = self.holder(0) or right
+            placed = blade.cut_line is not None or p.covered.any()
+            who = "forceps or fingers" if None in p.steady_tools else "forceps"
+            return [("Scalpel in the right hand", blade.held == 0),
+                    (f"Left hand steadies ({who})", self.steadied(blade) or p.covered.any()),
+                    ("Blade on the line (N, E)", placed and (blade.depth > 0 or p.covered.any())),
+                    (f"Cut along the line: {p.covered.mean():.0%}", False)]
+
+        def stitch_items(edge_names):
+            needle = self.holder(1) or right
+            forceps = self.holder(2) or self.other(needle)
+            target = self.needle_target()
+            first, second = edge_names
+            return [("Needle holder (R) and forceps (L)", needle.held == 1 and forceps.held == 2),
+                    (f"Lift the {first} (forceps)", self.entry is not None or
+                     self.edge_held(forceps, target)),
+                    (f"Needle through the {first}", self.entry is not None),
+                    (f"Lift the {second}", self.exit is not None or
+                     (self.entry is not None and self.edge_held(forceps, target))),
+                    (f"Needle out through the {second}", self.exit is not None),
+                    ("Grasp the needle tip (forceps)", self.needle_grasp is not None),
+                    ("Pull the suture through (Q)", self.pulled),
+                    (f"Instrument tie: throw {min(self.throws + 1, 3)}/3", False)]
+
+        if p is None:       # suture the laceration
+            slots = self.site.stitch_slots
+            done = len(self.stitches)
+            if done >= slots:
+                return [("x", f"All {slots} stitches tied")]
+            return ([(">", f"Stitch {done + 1} of {slots} ({done} tied)")] +
+                    marks(stitch_items(("first edge", "opposite edge")), "  "))
+        rows = []
+        for i, (kind, line, title) in enumerate(p.steps):
+            mark = "x" if i < p.step else (">" if i == p.step else " ")
+            rows.append((mark, f"{i + 1}. {title}"))
+            if i == p.step:
+                if kind == "cut":
+                    rows += marks(cut_items(), "  ")
+                else:
+                    rows.append((">", f"  Stitch {p.tied + 1} of {STITCHES_PER_ANASTOMOSIS}"))
+                    rows += marks(stitch_items(("graft", "artery")), "  ")
+        return rows
+
+    def action_prompt(self, short=False):
+        """The next action; `short` leaves out the step title (the checklist shows it)."""
         if self._message and time.monotonic() - self._message_at < 2.5:
             return self._message
         side, text = self.plan()
+        if short and self.procedure is not None and self.procedure.head():
+            text = text.replace(self.procedure.head(), "", 1)
         return text if side is None else f"{side.capitalize()} hand: {text}"
 
     # --- cutting -------------------------------------------------------------------------
@@ -1250,6 +1324,32 @@ class CuttingStation:
 
 
 
+def completed_text(kind, detail):
+    """What the trainee just completed, for the overlay (None for events not worth showing)."""
+    hand = detail.get("hand", "").capitalize()
+    if kind == "pickup":
+        return f"{hand} hand took the {TOOL_NAMES[detail['tool']].lower()}"
+    if kind == "grip":
+        return f"{hand} hand: tissue {'held with the forceps' if detail.get('tool') == 2 else 'stretched'}"
+    if kind == "puncture":
+        error = detail.get("error_mm")
+        off = f" ({error:.1f} mm off target)" if error else ""
+        return f"Needle {'through the first' if detail['edge'] == 'entry' else 'out through the second'} edge{off}"
+    if kind == "grasp":
+        return "Forceps grasped the needle"
+    if kind == "pulled":
+        return "Suture pulled through"
+    if kind == "throw":
+        return f"Throw {detail['throw']}/3 tied"
+    if kind == "stitch":
+        return f"Stitch {detail['number']} complete"
+    if kind == "procedure_step":
+        return f"Step complete: {'cut' if detail['action'] == 'cut' else 'sutured'} {detail['vessel']}"
+    if kind == "trim":
+        return "Thread trimmed"
+    return None
+
+
 class Session:
     """One trainee at the table: the station, the recording of the current attempt, its
     upload to Aiven (PostgreSQL, Kafka), the coach, and the autopilot.
@@ -1259,19 +1359,24 @@ class Session:
     autopilot replays the best complete attempt at the site into a fresh station.
     """
 
-    def __init__(self, model, data, site, store, telemetry=None, coach=None, render=None, now=None):
+    def __init__(self, model, data, procedure, store, telemetry=None, coach=None, render=None, now=None):
         self.model, self.data = model, data
         self.store, self.telemetry, self.coach = store, telemetry, coach
         self.render = render or (lambda: None)
         self.autopilot = None
         self._notice, self._notice_at = "", -1e9
         self.last = None             # summary of the last saved attempt
-        self.begin(site, time.monotonic() if now is None else now)
+        self.done = deque(maxlen=3)  # (time, text) of the last completed actions
+        self.begin(procedure, time.monotonic() if now is None else now)
 
-    def begin(self, site, now, record=True):
-        self.site = site
-        self.station = CuttingStation(make_tissue(self.model, self.data, site))
-        self.recorder = (motion_log.Recorder(site.name, "keyboard", sorted(JOINTS), HAND_ANCHOR, now)
+    def begin(self, procedure, now, record=True):
+        """A fresh station for `procedure` (a procedures.Procedure)."""
+        self.procedure = procedure
+        self.site = SITES[procedure.site]
+        self.station = CuttingStation(make_tissue(self.model, self.data, self.site, procedure.task),
+                                      procedure.task)
+        self.done.clear()
+        self.recorder = (motion_log.Recorder(procedure.key, "keyboard", sorted(JOINTS), HAND_ANCHOR, now)
                          if record else None)
 
     @property
@@ -1281,6 +1386,9 @@ class Session:
     @notice.setter
     def notice(self, text):
         self._notice, self._notice_at = text, time.monotonic()
+
+    def recent_done(self, now, seconds=6):
+        return [text for at, text in self.done if now - at <= seconds]
 
     def recent_notice(self, seconds=8):
         return self._notice if time.monotonic() - self._notice_at < seconds else ""
@@ -1293,6 +1401,8 @@ class Session:
         st = self.station
         if st.procedure is not None:
             return st.procedure.done
+        if st.task == "free":
+            return False       # free practice ends when the trainee starts over
         return len(st.stitches) >= st.site.stitch_slots
 
     def end(self, now):
@@ -1305,7 +1415,7 @@ class Session:
             return None
         self.store.save(attempt)
         self.last = attempt.summary
-        best = self.store.best(self.site.name)
+        best = self.store.best(self.procedure.key)
         ideal = " - new best, the autopilot will replay it" if (
             best and best[0]["id"] == attempt.summary["id"]) else ""
         self.notice = (f"Attempt saved: {attempt.summary['score']:.0f}/100 "
@@ -1315,28 +1425,30 @@ class Session:
             self.coach.attempt_finished(attempt.summary, self.render)
         return attempt
 
-    def restart(self, now, site=None):
+    def restart(self, now, procedure=None):
         self.end(now)
         self.stop_autopilot(now, restart=False)
         self.station.park_all()
-        self.begin(site or self.site, now)
+        self.begin(procedure or self.procedure, now)
 
     # --- autopilot ------------------------------------------------------------------------
     def start_autopilot(self, now):
-        best = self.store.best(self.site.name)
+        best = self.store.best(self.procedure.key)
         if best is None:
-            self.notice = f"No complete {self.site.name} attempt recorded yet: finish one first"
+            self.notice = ("Free practice has no ideal run: choose a procedure for the autopilot"
+                           if self.procedure.task == "free" else
+                           f"No complete {self.procedure.label.lower()} attempt yet: finish one first")
             return False
         summary, blob = best
         self.end(now)
         self.station.park_all()
-        self.begin(self.site, now, record=False)
+        self.begin(self.procedure, now, record=False)
         self.autopilot = motion_log.Autopilot(blob)
-        robot = self.store.root / "robot" / f"{self.site.name}-{summary['id']}.json"
+        robot = self.store.root / "robot" / f"{self.procedure.key}-{summary['id']}.json"
         robot.parent.mkdir(parents=True, exist_ok=True)
         if not robot.exists():
             robot.write_text(json.dumps(motion_log.robot_trajectory(blob)), encoding="utf-8")
-        self.notice = (f"Autopilot: replaying the best {self.site.name} attempt "
+        self.notice = (f"Autopilot: replaying the best attempt at {self.procedure.label} "
                        f"({summary['score']:.0f}/100, {summary['started_at'][:10]}); "
                        f"robot trajectory in {robot.relative_to(self.store.root.parent)}")
         print(self.notice, flush=True)
@@ -1348,7 +1460,7 @@ class Session:
         self.autopilot = None
         if restart:
             self.station.park_all()
-            self.begin(self.site, now)
+            self.begin(self.procedure, now)
             self.notice = "Autopilot off: your turn"
 
     # --- per frame -------------------------------------------------------------------------
@@ -1371,6 +1483,10 @@ class Session:
             self.telemetry.frame(now, self.attempt_id, self.station, self.autopilot is not None)
         if self.coach is not None:
             self.coach.note_events(events)
+        for kind, detail in events:
+            text = completed_text(kind, detail)
+            if text:
+                self.done.append((now, text))
         if self.recorder is not None and self.complete():
             self.end(now)
         return drawn
@@ -1388,7 +1504,7 @@ KEY_GUIDE = (
     ("Move", "arrows move   Q/E up/down   N align"),
     ("Act", "F grip / pass needle   T throw   X trim"),
     ("AI", "V voice  B Gemma review  I assistant  (panel: Autopilot)"),
-    ("More", "R start over  0 view  H re-aim  P site  M sound  K keys"),
+    ("More", "R start over  0 view  H re-aim  P procedure  M sound  K keys"),
 )
 
 # MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
@@ -1473,12 +1589,32 @@ def render_frame(renderer, data, camera, option, drawn, station, now):
     return renderer.render()
 
 
-def display(gloves, preview, site):
+def compact_checklist(rows, before=1, after=3):
+    """Main steps in full; of the indented sub-steps only the last finished one, the current
+    one and the next few, so the box stays small (MuJoCo overlays hold about 500 characters)."""
+    sub = [i for i, (_, text) in enumerate(rows)
+           if text.startswith("  ") and not text.startswith("  Stitch")]
+    active = [i for i in sub if rows[i][0] == ">"]
+    current = active[-1] if active else (sub[0] if sub else 0)
+    keep = set(i for i in range(len(rows)) if i not in sub)
+    keep |= {i for i in sub if current - before <= i <= current + after}
+    return [rows[i] for i in sorted(keep)]
+
+
+def checklist_text(session, now):
+    """The checklist as plain text (Procedures window)."""
+    rows = [f"[{mark}] {text}" for mark, text in session.station.checklist()]
+    done = session.recent_done(now)
+    return "\n".join(rows + ([""] + [f"Done: {text}" for text in done] if done else []))
+
+
+def display(gloves, preview, procedure):
     model = build_model()
     Look.model = model
     data = mj.MjData(model)
     mj.mj_forward(model, data)
-    switch = SiteSwitch(model, data, site.name)
+    site = SITES[procedure.site]
+    procedures_button = PanelButton(model, data, PROCEDURES_BUTTON)
     clear_button = PanelButton(model, data, CLEAR_BUTTON)
     review_button = PanelButton(model, data, REVIEW_BUTTON)
     assistant_button = PanelButton(model, data, ASSISTANT_BUTTON)
@@ -1506,7 +1642,19 @@ def display(gloves, preview, site):
             return None
 
     last_frame = time.monotonic()
-    session = Session(model, data, site, store, telemetry, coach, render, last_frame)
+    session = Session(model, data, procedure, store, telemetry, coach, render, last_frame)
+    picker = None
+
+    def open_picker():
+        nonlocal picker
+        if picker is None or not picker.alive:
+            try:
+                from procedure_window import ProcedureClient
+                picker = ProcedureClient(PROCEDURES.values(), session.procedure.key)
+            except OSError as error:
+                print(f"Procedures window unavailable ({error}); use P to cycle", flush=True)
+
+    open_picker()
     print("Two hands: the keyboard moves the hand the next step needs (green cuff); Z swaps it.\n"
           "1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
           "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
@@ -1516,7 +1664,8 @@ def display(gloves, preview, site):
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the gloves: press H, then rest your hands flat with fingers toward the screen.\n"
           "M mutes or unmutes the OR sounds.\n"
-          "Panel (Equality, right): Skin / Heart / Bypass (or P), Clear repair, Key guide (or K),\n"
+          "Procedures window (dropdown): pick incision, suture, bypass or free practice; P cycles.\n"
+          "Panel (Equality, right): Procedures (reopens it), Clear repair, Key guide (or K),\n"
           "      Autopilot (replays the best recorded attempt), AI Assistant (I), AI Voice (V),\n"
           "      Gemma review (B).\n"
           f"{store.status}. {telemetry.status}. {coach.status()}.",
@@ -1557,11 +1706,12 @@ def display(gloves, preview, site):
                     if TOGGLE_GUIDE in pressed:
                         data.eq_active[guide_id] = not data.eq_active[guide_id]
                     show_guide = bool(data.eq_active[guide_id])
-                    choice = switch.poll()
+                    if procedures_button.pressed():
+                        open_picker()
+                    choice = picker.chosen() if picker is not None else None
                     if SWITCH_SITE in pressed:
-                        names = list(SITES)
-                        choice = names[(names.index(station.site.name) + 1) % len(names)]
-                        switch.select(choice)
+                        names = list(PROCEDURES)
+                        choice = names[(names.index(session.procedure.key) + 1) % len(names)]
                     picture["camera"].lookat[:] = viewer.cam.lookat
                     picture["camera"].distance = viewer.cam.distance
                     picture["camera"].azimuth = viewer.cam.azimuth
@@ -1569,17 +1719,18 @@ def display(gloves, preview, site):
                     picture["option"].geomgroup[:] = station.site.groups
                 taken = {SWITCH_SITE, TOGGLE_GUIDE, START_OVER, REVIEW_KEY, ASSISTANT_KEY, VOICE_KEY}
                 pressed = [code for code in pressed if code not in taken]
-                if clear and (choice is None or choice == station.site.name):
+                if clear and (choice is None or choice == session.procedure.key):
                     session.restart(now)
                     sounds.play("setdown")
-                if choice is not None and choice != station.site.name:
-                    site = SITES[choice]
-                    session.restart(now, site)
-                    with viewer.lock():
-                        show_site(model, viewer.opt, site)
-                        bench_view(model, data, viewer.cam, site.zoom, site.focus)
+                if choice is not None and choice != session.procedure.key:
+                    session.restart(now, PROCEDURES[choice])
+                    if session.site is not site:
+                        site = session.site
+                        with viewer.lock():
+                            show_site(model, viewer.opt, site)
+                            bench_view(model, data, viewer.cam, site.zoom, site.focus)
                     sounds.play("switch")
-                    print(f"Operating site: {site.name}", flush=True)
+                    print(f"Procedure: {session.procedure.label}", flush=True)
                 if autopilot:
                     if autopilot_toggle.on:
                         if not session.start_autopilot(now):
@@ -1637,16 +1788,24 @@ def display(gloves, preview, site):
                         pilot = session.autopilot
                         action = ("AUTOPILOT finished: Autopilot button off to take over" if pilot.done else
                                   f"AUTOPILOT {pilot.progress:.0%} (best run {pilot.summary['score']:.0f}/100): "
-                                  f"{station.action_prompt()}")
+                                  f"{station.action_prompt(short=True)}")
                     else:
-                        action = station.action_prompt()
-                    best = store.best(site.name)
+                        action = station.action_prompt(short=True)
+                    best = store.best(session.procedure.key)
                     scores = (f"last {session.last['score']:.0f}" if session.last else "no attempt yet") + (
                         f", best {best[0]['score']:.0f}" if best else "")
                     coach_line = f"{scores}  |  {session.recent_notice() or coach.status()}"
-                    texts = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
-                              "SURGICAL TRAINING\nSite\nHands\nStitches / depth\nAction\nScore / coach",
-                              f"{status}\n{station.site.name.capitalize()}  (P or Equality panel)\n"
+                    rows = compact_checklist(station.checklist())
+                    done = session.recent_done(now)[-2:]
+                    steps = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_TOPLEFT),
+                              "\n".join(["PROCEDURE"] + [f"[{m}]" for m, _ in rows] +
+                                         ["DONE"]*bool(done) + [""]*(len(done) - 1)),
+                              "\n".join([session.procedure.label] + [t for _, t in rows] + done))]
+                    if picker is not None:
+                        picker.update(session.procedure.key, checklist_text(session, now))
+                    texts = steps + [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
+                              "SURGICAL TRAINING\nProcedure\nHands\nStitches / depth\nAction\nScore / coach",
+                              f"{status}\n{session.procedure.label}  (P or Procedures window)\n"
                               f"{tool_status}\n{len(station.stitches)} / {station.depth*1000:.1f} mm\n"
                               f"{action}\n{coach_line}")]
                     if show_guide:
@@ -1659,6 +1818,8 @@ def display(gloves, preview, site):
                 time.sleep(max(0, 1/60 - (time.monotonic() - now)))
     finally:
         session.end(time.monotonic())
+        if picker is not None:
+            picker.close()
         coach.close()
         telemetry.close()
         store.close()
@@ -1668,11 +1829,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preview", action="store_true",
                         help="Practice with keyboard hands and no gloves")
-    parser.add_argument("--site", choices=sorted(SITES), default="skin",
-                        help="What to operate on: the skin pad (default), the heart, or a bypass")
+    parser.add_argument("--procedure", choices=list(PROCEDURES), default=DEFAULT,
+                        help="Procedure to start with (also chosen in the Procedures window)")
+    parser.add_argument("--site", choices=sorted(SITES),
+                        help="Older option: skin or heart (suture) or bypass")
     args = parser.parse_args()
-    site = SITES[args.site]
-    print(f"Operating site: {site.name}", flush=True)
+    procedure = from_site(args.site) if args.site else PROCEDURES[args.procedure]
+    print(f"Procedure: {procedure.label}", flush=True)
     gloves = GloveStream()
     if not args.preview:
         print("Connect both gloves (rokoko-sdk and rkk-hand-solver --emit-openxr). Tilt and roll\n"
@@ -1680,7 +1843,7 @@ def main():
               "fingers toward the screen for half a second. Press H to set it again.\n"
               "A glove that is not streaming is replaced by a keyboard hand.", flush=True)
         threading.Thread(target=gloves.run, daemon=True).start()
-    display(gloves, args.preview, site)
+    display(gloves, args.preview, procedure)
 
 
 if __name__ == "__main__":
