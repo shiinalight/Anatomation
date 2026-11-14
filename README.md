@@ -1,159 +1,117 @@
-# Surgical Training Simulatorr
+| Measure | Meaning |
+| --- | --- |
+| Sampled tip path | Distance accumulated between consecutive tool-tip samples at up to 10 Hz. The app skips long gaps, tool changes, tracking-state changes, and assisted jumps. |
+| Virtual tip variation | RMS distance of recent tip samples from the midpoints of their neighbors, in millimeters. |
+| Holder shaft angle | Needle-holder elevation relative to the horizontal table. |
+| Distance to guide | Distance from the virtual tip to the active assisted target, when available. |
+| Rejected actions | Inputs such as a puncture attempted before lowering to the target, with the reason recorded in the timeline. |
 
-A MuJoCo hackathon demo with two Rokoko-controlled hands, interactive surgical
-instruments, and guided two-handed cutting and suturing.
+The heart surface and interactions are geometric simulations, with scripted tool actions and rendered marks. The prototype lacks deformable tissue, measured contact forces, physical thread tension, and validated clinical proficiency scoring. Its measurements describe the virtual exercise.
 
-## Run on macOS
+</details>
 
-Create and activate a Python virtual environment, then install the dependencies.
+## Browser workbench
 
-    python3 -m venv .venv
-    source .venv/bin/activate
-    python -m pip install -r requirements.txt
+Open [`surgisense-workbench/index.html`](surgisense-workbench/index.html) **from your local files**. On Windows, run the following from the workspace root, or double-click the file in Explorer:
 
-Try it without gloves (both hands are keyboard-driven):
+```powershell
+Start-Process .\surgisense-workbench\index.html
+```
 
-    mjpython surgical_suturing_guided.py --preview
+Select **Explore session analysis**, then choose a stroke or stitch on the pad map to see its measurements. Toggle **Strokes**, **Stitches**, and **Band**, or use **Export measurements** for a CSV. Under **Practice**, press **Play** or drag the slider to move through the 48-second sample. Under **Training**, select a stage to see its cue.
 
-Switch between sites inside the simulator with the **Skin** / **Heart** / **Bypass** buttons
-in the **Equality** section of the viewer's right-hand panel (or press **P**). `--site` picks where to
-start (works with or without `--preview`):
+[![SurgiSense sample session showing the interactive pad map, a selected stroke, its deviation chart, and recorded actions.](docs/readme/surgisense-workbench.webp)](docs/readme/surgisense-workbench.webp)
 
-    mjpython surgical_suturing_guided.py --site skin     # skin pad (default)
-    mjpython surgical_suturing_guided.py --site heart    # heart in an open chest
-    mjpython surgical_suturing_guided.py --site bypass   # coronary artery bypass graft
+The workbench runs on built-in sample coordinates. The desktop workstation saves its own attempts as local JSON for **Session Review**.
 
-For live tracking, start the Rokoko Device SDK driver in one Terminal:
+## Live glove and AI coaching
 
-    rokoko-sdk --auto-stream-usb
+<details>
+<summary><strong>Connect a Rokoko Smartglove over USB</strong></summary>
 
-In another Terminal, start the hand solver:
+1. Install and activate the [Rokoko Device SDK](https://sdk.rokoko.com/) and connect a USB-streaming-capable Smartglove. Close Rokoko Studio if it is using the glove.
+2. Apply the `PATH` step under [Launch modes](#launch-modes), then run the launcher from the workspace root. Add `--hand left` for a left glove. The default is right.
 
-    rkk-hand-solver --no-driver --emit-openxr
+   ```powershell
+   & '.\Surgery Live.cmd' --guided
+   ```
 
-Then launch the simulator from this directory:
+3. Wait for the calibration prompt. Hold your hand flat and press <kbd>K</kbd> with the viewport focused. Use the keyboard to translate the hand while the glove controls wrist orientation and finger curl.
 
-    mjpython surgical_suturing_guided.py
+The launcher reuses a service on `127.0.0.1:12276` or starts `%LOCALAPPDATA%\Rokoko Device SDK\bin\rokoko-sdk.exe` with `--auto-stream-usb`. If your SDK is already running on a custom port, call `hand_lab.py --sdk --guided --sdk-port PORT` directly. For local Rokoko Studio UDP input instead, run `hand_lab.py --guided` with Studio streaming to `127.0.0.1:14043`, or set `--port PORT` to match.
 
-Connect both gloves. The simulator reads the solver's stream directly (port 12277) and
-tells the hands apart by the side each glove reports. If one glove is not streaming,
-a keyboard-driven hand takes its place, so you can also work with one glove.
+</details>
 
-## Controls
+<details>
+<summary><strong>Enable Gemma frame review and Gemini voice or text</strong></summary>
 
-| Action | Keys / mouse |
-|---|---|
-| Which hand | The keys act on the hand the next step needs (green band on its cuff); Z swaps to the other hand |
-| Pick an instrument | 1 scalpel, 2 needle holder, 3 forceps, 4 scissors, then G to pick up / set down |
-| Move the hand | Arrows and Q/E (tap for a small step, hold to glide) |
-| Suturing | N aligns the tool, F grips with the forceps (or presses with an empty hand) or passes the needle, T throws a knot, X trims, R clears the pad |
-| Camera | Two-finger scroll to zoom, left-drag to orbit, right-drag to pan, double-right-click a spot to zoom around it, 0 resets the view |
-| Gloves | H recalibrates: press H, then rest your hands palm-down, fingers toward the monitor |
-| Sound | M mutes or unmutes the OR sounds (macOS) |
-| Operating site | Skin / Heart / Bypass buttons in the right panel's Equality section, or press P to go to the next one |
-| Key guide | Shown in a bar at the bottom right, next to the status box; K or the Key guide button in the Equality section hides it |
-| Start over | R, or the Clear repair button in the same Equality section: the attempt so far is scored and saved, then the site starts fresh with the tools back in the trays |
-| Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
-| AI coach | I opens the assistant window (typed questions), V turns the voice coach on or off, B asks Gemma for a review (also buttons in the Equality section) |
+Install `sounddevice` for voice and get a key from [Google AI Studio](https://ai.google.dev/gemini-api/docs/api-key). To try both coaches with the keyboard:
 
-## Two-handed technique
+```powershell
+.\.venv\Scripts\python.exe -m pip install sounddevice
+& '.\Surgery Voice.cmd' --preview
+```
 
-The right hand cuts and drives the needle; the left hand works against it, as in theatre.
-The status bar always names the hand and the key for the next step.
+Use the `PATH` step under [Launch modes](#launch-modes) first. The Windows launcher can read `SURGERY_GEMMA_API_KEY` from a local `.env` or the environment. If it prompts you for a key, it saves the entry encrypted for your Windows account. Use `--replace-key` to replace the saved key. Keep keys out of commits.
 
-- **Cutting**: the left hand steadies the tissue next to the blade (an empty hand stretches
-  the skin, or the forceps hold it). The blade does not open unsteadied tissue.
-- **Each stitch**:
-  1. Left forceps lift the first edge (N, F).
-  2. Right needle holder passes the needle through it (N, E E, F).
-  3. Left forceps lift the opposite edge (N, F).
-  4. Needle through the opposite edge (N, E E, F).
-  5. Left forceps grasp the needle tip (N, F) and pull the suture through (Q Q Q).
-  6. Instrument tie with the needle holder: three throws (T T T): a double wrap, a single
-     wrap the other way, and a single wrap that squares the knot.
-- Each needle pass needs a fresh forceps grip on the edge it goes through. Dropping the
-  forceps before the knot lets the needle slip back.
+| Action | Data sent to the hosted coach |
+| --- | --- |
+| <kbd>B</kbd> or **Review scene** | A rendered simulation frame plus current exercise context goes to Gemma. |
+| <kbd>V</kbd> or **Start voice** | A microphone clip after a pause, plus exercise context, goes to Gemini. The app pauses capture during speech playback. |
+| Type in **Ask the Coach** | The question and current exercise context go to Gemini. |
+| **Ask Gemini for a review** | A summary of the selected attempt, including counts, completed stages, and up to 20 recent events, goes to Gemini. The reply opens in the coach panel. |
 
-## Operating sites
+Frame-only coaching works without `sounddevice`. Use `& '.\Surgery Gemma.cmd' --guided` to enable it in the keyboard workstation. The local checklist, measurements, and session review are available with coaching disabled.
 
-**Skin** (`--site skin`, default): a betadine-prepped skin window in the drapes, with a
-15 cm laceration, violet marker lines and five stitches 32 mm apart.
+</details>
 
-**Heart** (`--site heart`): a heart in an open chest (median sternotomy with a
-retractor). The heart is the NIH 3D model in `assets/heart-nih3d/`, loaded from its
-own `heart-nih3d.xml` so its meshes keep their relative paths and its materials keep
-the file's own colours (pink muscle, red arteries, blue veins), converted from Blender's
-linear colour space so they look the same as in Blender.
+## Project map
 
-The repair is a 3 cm laceration on the front wall of the left ventricle, placed by
-ray-casting the model where it stays at least 7 mm from any visible vessel. There are
-five stitch targets (white dots), 6 mm apart, with 6 mm bites. Cutting, needle
-puncture and forceps grip follow the curved heart surface. Placing the blade or
-needle on a vessel gives a warning instead.
+```mermaid
+flowchart LR
+    Input[Keyboard or Rokoko glove] --> Viewer[MuJoCo workstation]
+    Viewer --> Exercise[Heart exercise and instrument actions]
+    Exercise --> Review[Local assessment and session JSON]
+    Viewer -->|On request| Coach[Hosted Gemma and Gemini]
+    Sample[Built-in example coordinates] --> Web[SurgiSense browser workbench]
+```
 
-**Bypass** (`--site bypass`): a guided coronary artery bypass graft on the same heart.
-The status bar shows the current step and the next key to press.
+| Files | Role |
+| --- | --- |
+| [`hand_lab.py`](hand_lab.py), [`surgery_interface.py`](surgery_interface.py) | Desktop entry point and Tk workstation UI |
+| [`guided_surgery.py`](guided_surgery.py), [`heart_surface.py`](heart_surface.py), [`surgery_lab.xml`](surgery_lab.xml) | Instrument actions, heart surface, and operating-room scene |
+| [`training_session.py`](training_session.py) | Local assessment, trajectory sampling, and JSON reports |
+| [`rokoko_rgmp.py`](rokoko_rgmp.py), [`Start-Surgery.ps1`](Start-Surgery.ps1) | Glove input and Windows live launcher |
+| [`gemma_coach.py`](gemma_coach.py), [`gemini_voice.py`](gemini_voice.py) | Hosted visual, voice, and text coaching |
+| [`suturing.py`](suturing.py), [`surgisense-workbench/`](surgisense-workbench/) | Scripted practice pad and standalone browser workbench |
 
-| Step | Tool | How |
-|---|---|---|
-| 1. Cut the coronary artery | Right scalpel, left forceps | Forceps hold the vessel wall beside the white marked line (N, F); N puts the blade on the line, E lowers it, left / right arrows cut along it |
-| 2. Suture the graft onto the coronary | Right needle holder, left forceps | Six stitches around the opening, each as above: forceps lift the graft, needle through the graft (green target), forceps lift the artery, needle through the artery, forceps pull the suture through, T T T |
-| 3. Incise the ascending aorta | Right scalpel, left forceps | Same as step 1, on the aorta |
-| 4. Suture the graft onto the aorta | Right needle holder, left forceps | Same as step 2; when the last stitch is tied the graft fills with blood |
+<details>
+<summary><strong>Other prototypes, assets, and licensing</strong></summary>
 
-The marked lines were placed by ray-casting the heart model: the coronary cut lies on
-the straight arm of the visible coronary artery, the aortotomy on the top of the
-ascending aorta. Cutting any other vessel still gives a warning.
+- [`surgical-training-simulator/`](surgical-training-simulator/) and [`surgical-training-simulator-dashboard/`](surgical-training-simulator-dashboard/) have their own READMEs and dependencies. The dashboard variant documents an optional database-backed session history.
+- [`surgisense-design/`](surgisense-design/) and [`surgisense-website/`](surgisense-website/) are alternate browser prototypes.
+- [`telepharm.py`](telepharm.py), [`hotcell_scene.xml`](hotcell_scene.xml), and [`arduino_knob.ino`](arduino_knob.ino) belong to a separate hot-cell simulation. Run `python telepharm.py --mock` from the workspace root for keyboard input. The optional serial knob path uses `pyserial`.
+- [Operating-room render](operating_room_preview.png) · [Heart mesh preview](human-heart-preview.png) · [Practice-pad render](surgery_stitches_preview.png) · [Stitch heart mascot](stitch-heart-mascot.png)
+- This workspace has no root license file. The bundled Inter font has its own [Open Font License](surgisense-workbench/inter-OFL.txt).
 
-## Recording, scoring, autopilot and AI coach
+</details>
 
-Every attempt (from a fresh site until it is complete, or until R, Clear repair or a site
-switch) is recorded at 60 frames per second: both gloves' joints, every key, and what each
-instrument did. When it ends it is scored and saved.
+## Troubleshooting
 
-- **Scoring** (`motion_log.py`): the attempt is split into its tasks (each cut and each stitch).
-  Each task is scored out of 100 on time, instrument travel, refused actions and needle
-  accuracy. The status box shows the last and best scores.
-- **Ideal run and autopilot**: the best complete attempt at a site is its ideal run. The
-  **Autopilot** button replays it into a fresh site, exactly: the same cuts, needle passes and
-  knots, with idle time shortened. Starting the autopilot also writes the instrument trajectory
-  for a two-arm robot to `training-data/robot/<site>-<attempt>.json`: per frame and hand, the
-  tool, tip position, direction and whether it is closed.
-- **Aiven** (`aiven_store.py`): attempts are saved in `training-data/` first and then synced in
-  the background to **Aiven PostgreSQL**:
-  - `sim_attempts`, `sim_tasks` and `sim_recordings` hold the attempts, task scores and recordings;
-  - the `sim_ideal_runs` view gives each site's best run, from any trainee, which is downloaded
-    for the autopilot;
-  - the `sim_task_best` view gives the per-task benchmarks the coach compares against.
+<details>
+<summary><strong>Viewer startup, tracking, microphone, or missing sessions</strong></summary>
 
-  Live instrument telemetry (10 Hz) and step events stream to **Aiven Kafka** (`surgery-telemetry`,
-  `surgery-events`). `python telemetry_monitor.py` follows a session from another computer,
-  for example an instructor station or a robot bridge.
-- **Gemini** (`gemini_voice.py`, `coach.py`) answers spoken or typed questions from the live
-  state: the next step and hand, recent events, and the last attempt against the best results.
-  Answers are read aloud.
-- **Gemma** (`gemma_review.py`) writes a short debrief from a rendered frame and the task scores
-  after each complete attempt, or when you press B. It runs on **Modal** with open weights
-  (`modal_gemma.py`), or on Google AI Studio when Modal is not set up.
+| Symptom | Check |
+| --- | --- |
+| `ModuleNotFoundError` | Install packages with the same Python executable that runs `hand_lab.py`. For `.cmd` launchers, check `Get-Command python`. |
+| The viewer fails to create a render context | Use a Windows desktop session with working OpenGL graphics. Run `python hand_lab.py --snapshot telepharm-preview.png` with the configured interpreter to test the practice-pad renderer. |
+| The glove stays on **Waiting** | Check the USB connection, the SDK license and process, and the `--hand` setting. If the launcher started the driver, inspect `surgery-sdk.err.log` in `%TEMP%`. |
+| The avatar moves unexpectedly | Hold the hand flat and recalibrate with <kbd>K</kbd> while the stream is active. Press <kbd>C</kbd> if you also need to park the tool and recenter the hand. |
+| <kbd>V</kbd> cannot open the microphone | Check `sounddevice`, the Windows default recording device, and microphone permissions. With voice mode enabled, you can still type in the coach panel. |
+| The coach reports an API error | Check that the key has access to the model configured in the coach module and that the machine can reach the Gemini API. |
+| A run is missing from history | Perform a recorded action, then press <kbd>R</kbd> or close the guided workstation normally. The scripted pad and browser sample use separate entry points. |
+| The browser link shows HTML source | Open the local `index.html` file in a browser so it can load its neighboring scripts and styles. |
 
-Set-up: `pip install -r requirements-ai.txt`, then copy `.env.example` to `.env` and fill in
-what you have (AI Studio key, Modal URL and token, Aiven PostgreSQL URI, Kafka bootstrap).
-Put the Aiven CA certificate in `aiven-ca.pem` and the Kafka `ca.pem`, `service.cert` and
-`service.key` in `kafka/`. Create the two Kafka topics in the Aiven console. Without any of
-this, recording, scoring and the autopilot still work locally.
+</details>
 
-## Files
-
-- `surgical_suturing_guided.py`: glove tracking (both gloves), instruments and the
-  two-handed cutting and suturing logic.
-- `or_scene.py`: the operating room (layout, heart model import, heart-surface queries,
-  generated textures, lighting, patient monitor, sounds).
-- `bypass.py`: the guided coronary bypass procedure (targets, steps, graft).
-- `motion_log.py`: recording, task scoring, autopilot replay and the robot trajectory export.
-- `aiven_store.py`: local-first storage synced to Aiven PostgreSQL, and Kafka telemetry;
-  `telemetry_monitor.py` follows the telemetry live.
-- `coach.py`, `gemini_voice.py`, `gemma_review.py`, `assistant_window.py`: the AI coach
-  (Gemini voice and typed questions, Gemma debriefs, the assistant window). The voice code and
-  window layout are ported from hadi-ce04's `feature/ai-assistant-aiven` branch.
-- `modal_gemma.py`: Gemma served on a Modal GPU (vLLM, OpenAI-compatible API).
-- `assets/heart-nih3d/`: the heart model (MJCF, three OBJ meshes, MTL), unchanged.
+[Back to top](#telepharm)
