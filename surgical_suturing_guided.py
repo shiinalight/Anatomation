@@ -814,7 +814,7 @@ class CuttingStation:
         if self.needle_grasp is not None and not self.pulled:
             self.needle_grasp = None       # the forceps let go of the needle
         self.note("reset_hands")
-        self.inform("Hands back in the surgeon's view")
+        self.inform("Hands back to their start")
 
     def reset(self):
         self.marks.clear()
