@@ -45,6 +45,7 @@ Then launch the simulator from this directory:
 | Glove | H recalibrates: rest your hand palm-down, fingers toward the monitor, then press H |
 | Sound | M mutes or unmutes the OR sounds (macOS) |
 | Operating site | Skin / Heart buttons in the right panel's Equality section, or press P |
+| Start over | Clear repair button in the same Equality section: removes all cuts, blood and stitches and puts the tools back in the trays (R clears cuts and stitches only) |
 
 ## Operating sites
 

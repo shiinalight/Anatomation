@@ -612,6 +612,7 @@ def _scene_xml():
   <equality>
     <weld name="Skin" body1="site_switch_a" body2="site_switch_b"/>
     <weld name="Heart" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
   </equality>
   <worldbody>
     {lights}
@@ -676,6 +677,22 @@ def build_model():
 
 
 SITE_SWITCH = {"skin": "Skin", "heart": "Heart"}   # site -> button (equality) name
+CLEAR_BUTTON = "Clear repair"
+
+
+class PanelButton:
+    """A one-shot button in the viewer's Equality panel: pressed() is True once per click,
+    and the button pops back up."""
+
+    def __init__(self, model, data, name):
+        self.data, self.id = data, model.equality(name).id
+        self.data.eq_active[self.id] = False
+
+    def pressed(self):
+        if not self.data.eq_active[self.id]:
+            return False
+        self.data.eq_active[self.id] = False
+        return True
 
 
 class SiteSwitch:

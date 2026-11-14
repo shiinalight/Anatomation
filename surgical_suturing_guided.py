@@ -15,7 +15,7 @@ import numpy as np
 
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
-                      surface_strip, SiteSwitch)
+                      surface_strip, CLEAR_BUTTON, PanelButton, SiteSwitch)
 
 SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
 ANCHOR = np.array([0, -0.10, 1.015])
@@ -754,6 +754,7 @@ def display(frames, preview, site):
     data = mj.MjData(model)
     mj.mj_forward(model, data)
     switch = SiteSwitch(model, data, site.name)
+    clear_button = PanelButton(model, data, CLEAR_BUTTON)
     heading = Heading()
     last_status = None
     keys = SimpleQueue()
@@ -768,7 +769,8 @@ def display(frames, preview, site):
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
           "M mutes or unmutes the OR sounds.\n"
-          "Switch site: Skin / Heart buttons in the Equality panel on the right, or press P.",
+          "Switch site: Skin / Heart buttons in the Equality panel on the right, or press P.\n"
+          "Clear repair (same panel) removes all cuts, blood and stitches and puts the tools back.",
           flush=True)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
@@ -793,11 +795,17 @@ def display(frames, preview, site):
 
             # Site switching: the Skin / Heart buttons in the viewer's Equality panel, or P.
             with viewer.lock():
+                clear = clear_button.pressed()
                 choice = switch.poll()
                 if SWITCH_SITE in pressed:
                     choice = "heart" if station.site.name == "skin" else "skin"
                     switch.select(choice)
             pressed = [code for code in pressed if code != SWITCH_SITE]
+            if clear and (choice is None or choice == station.site.name):
+                station.park()
+                station = CuttingStation(make_tissue(model, data, site))
+                sounds.play("setdown")
+                print("Repair cleared", flush=True)
             if choice is not None and choice != station.site.name:
                 site = SITES[choice]
                 station.park()
