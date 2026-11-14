@@ -43,7 +43,8 @@ Then launch the simulator from this directory:
 The skin pad is replaced by a heart in an open chest (median sternotomy with a
 retractor). The heart is the NIH 3D model in `assets/heart-nih3d/`, loaded from its
 own `heart-nih3d.xml` so its meshes keep their relative paths and its materials keep
-the file's own colours (muscle red, arteries bright red, veins blue).
+the file's own colours (pink muscle, red arteries, blue veins), converted from Blender's
+linear colour space so they look the same as in Blender.
 
 The repair is a 3 cm laceration on the front wall of the left ventricle, placed by
 ray-casting the model where it stays at least 7 mm from any visible vessel. There are

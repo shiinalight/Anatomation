@@ -177,6 +177,14 @@ def _heart_material(name):
     return f"heart_{name}"
 
 
+def _linear_to_srgb(rgba):
+    """The model was exported from Blender, whose colours are linear; MuJoCo shows rgba
+    values as-is (sRGB), so convert to get the same colours Blender shows."""
+    values = [float(v) for v in rgba.split()]
+    out = [12.92*c if c <= .0031308 else 1.055*c**(1/2.4) - .055 for c in values[:3]]
+    return " ".join(f"{c:.4f}" for c in out + values[3:])
+
+
 def _heart_xml():
     """Mesh assets and body for the heart, read from the model's own MJCF.
 
@@ -197,7 +205,8 @@ def _heart_xml():
     for library in HEART_DIR.glob("*.mtl"):        # referenced by the OBJ files
         files[f"{folder}/{library.name}"] = library.read_bytes()
     for material in root.iter("material"):         # the model's own colours, unchanged
-        attrs = " ".join(f'{key}="{value}"' for key, value in material.attrib.items() if key != "name")
+        attrs = " ".join(f'{key}="{_linear_to_srgb(value) if key == "rgba" else value}"'
+                         for key, value in material.attrib.items() if key != "name")
         assets.append(f'<material name="{_heart_material(material.get("name"))}" {attrs}/>')
     geoms = []
     HEART_GEOMS.clear()
