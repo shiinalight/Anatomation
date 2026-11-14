@@ -19,6 +19,8 @@ import numpy as np
 from aiven_store import Telemetry, TrainingStore
 from bypass import STITCHES_PER_ANASTOMOSIS
 import motion_log
+import or_scene
+from environment.or_controls import EnvironmentControls, heart_home   # the operating room
 from procedures import DEFAULT, PROCEDURES, from_site, make_procedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
@@ -1440,8 +1442,9 @@ class Session:
         """A fresh station for `procedure` (a procedures.Procedure)."""
         self.procedure = procedure
         self.site = SITES[procedure.site]
-        self.station = CuttingStation(make_tissue(self.model, self.data, self.site, procedure.task),
-                                      procedure.task)
+        with heart_home():         # targets are placed with the heart in the chest (it may be lifted out)
+            self.station = CuttingStation(make_tissue(self.model, self.data, self.site, procedure.task),
+                                          procedure.task)
         self.done.clear()
         self.recorder = (motion_log.Recorder(procedure.key, "keyboard", sorted(JOINTS), HAND_ANCHOR, now)
                          if record else None)
@@ -1696,6 +1699,7 @@ def display(gloves, preview, procedure):
     keys = SimpleQueue()
     held_keys = HeldKeys()
     sounds = Sounds()
+    controls = EnvironmentControls(model, data)   # room: panel buttons, camera, heart, screens
     store, telemetry = TrainingStore(), Telemetry()
     from coach import Coach
     coach = Coach(store)
@@ -1766,6 +1770,9 @@ def display(gloves, preview, procedure):
                     held_keys.press(code, now)
                     pressed.append(code)
                 held = list(held_keys.moves(now, dt))
+                pressed += controls.step(viewer, now, session.station)   # room buttons (Reset view: 0)
+                if controls.new_heart:                     # Load heart (STL): reopen with it
+                    return controls.new_heart, session.procedure
                 station = session.station
 
                 # Panel buttons (Equality section) and their keys.
@@ -1846,12 +1853,14 @@ def display(gloves, preview, procedure):
                 pressed = [key for key in pressed if key != ord("H")]
                 poses, status = glove_poses(gloves, session.station.hands, preview, now, reset_heading)
                 live = status.endswith("live") or "glove live" in status
-                drawn = session.step(now, poses, pressed, held, live)
+                with controls.heart_at_home(viewer):     # tissue queries with the heart in place
+                    drawn = session.step(now, poses, pressed, held, live)
                 picture["drawn"] = drawn
                 coach.update(session.station, session.attempt_id or "autopilot",
                              session.autopilot is not None, voice, review, assistant, render)
                 with viewer.lock():
                     draw_user(viewer.user_scn, drawn, session.station, now)
+                    controls.follow_heart(viewer.user_scn)   # wounds move with a lifted heart
                     for side, points in drawn.items():     # keep the pick spheres on the palms
                         data.mocap_pos[pick_mocap[side]] = (
                             (points["wrist"] + points["middle_proximal"]) / 2 if points else [0, 0, -5])
@@ -1914,6 +1923,12 @@ def display(gloves, preview, procedure):
         store.close()
 
 
+def run(gloves, preview, procedure):
+    """The viewer; opened again with the new model when another heart is loaded."""
+    while (result := display(gloves, preview, procedure)) is not None:
+        or_scene.HEART_FILE, procedure = result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preview", action="store_true",
@@ -1922,7 +1937,9 @@ def main():
                         help="Procedure to start with (also chosen in the Procedures window)")
     parser.add_argument("--site", choices=sorted(SITES),
                         help="Older option: skin or heart (suture) or bypass")
+    parser.add_argument("--heart", help="Another heart model (STL or OBJ; x anterior, y left, z superior)")
     args = parser.parse_args()
+    or_scene.HEART_FILE = args.heart
     procedure = from_site(args.site) if args.site else PROCEDURES[args.procedure]
     print(f"Procedure: {procedure.label}", flush=True)
     gloves = GloveStream()
@@ -1932,7 +1949,7 @@ def main():
               "fingers toward the screen for half a second. Press H to set it again.\n"
               "A glove that is not streaming is replaced by a keyboard hand.", flush=True)
         threading.Thread(target=gloves.run, daemon=True).start()
-    display(gloves, args.preview, procedure)
+    run(gloves, args.preview, procedure)
 
 
 if __name__ == "__main__":

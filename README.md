@@ -211,6 +211,27 @@ Frame-only coaching works without `sounddevice`. Use `& '.\Surgery Gemma.cmd' --
 
 </details>
 
+## Cardiac operating room (environment)
+
+`surgical_suturing_guided.py` runs in a full cardiac operating room from `environment/`
+(`environment_simulator.xml`, included by `or_scene.py`): the draped patient on the OR table,
+intact prepped skin (skin procedures) or the opened chest with retractor, pericardium and bypass
+lines into the heart (heart procedures), heart-lung machine, anaesthesia machine, surgical lights,
+an extra cardiac instrument stand beside the trays, and moving screens (vitals, CT viewer, beating
+heart, perfusion, case board). Cuts and stitches on the skin follow the curve of the chest.
+`environment/or_controls.py` (numpy + mujoco only) adds these buttons to the viewer's Equality
+panel, next to Procedures, Reset hands and the others:
+
+| Control | Action |
+| --- | --- |
+| **Reset view** | Camera back to the surgeon's view (like <kbd>0</kbd>) |
+| **Reset instruments** | Tools back in the trays (the repair stays), heart back in the chest |
+| **Lift heart out** / double-click the heart | Lifts the heart out of the chest; Ctrl + right-drag moves it, Ctrl + left-drag turns it; wounds and stitches move with it. The button again puts it back |
+| **Load heart (STL)** or `--heart file.stl` | Another heart model (STL or OBJ; x anterior, y left, z superior; mm or m) replaces the NIH heart; the viewer reopens with it |
+| Camera | Stays inside the room when zooming out |
+
+`environment/README.txt` explains how it is connected; replace the whole folder to update it.
+
 ## Project map
 
 ```mermaid

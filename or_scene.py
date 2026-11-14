@@ -21,10 +21,18 @@ from pathlib import Path
 import mujoco as mj
 import numpy as np
 
+from environment.or_controls import button_xml, heart_home, heart_obj, obj_center
+
 # --- Layout shared with the gameplay code (metres, world frame, z up) ---------------
 # Heart model (NIH 3D), loaded from its own MJCF so its meshes keep their relative paths.
 HEART_DIR = Path(__file__).resolve().parent / "assets" / "heart-nih3d"
 HEART_XML = HEART_DIR / "heart-nih3d.xml"
+# Another heart model (STL/OBJ: x anterior, y left, z superior; mm or m), placed where the NIH heart
+# is; set by --heart or the "Load heart (STL)" button. Its whole surface counts as heart muscle.
+HEART_FILE = None
+# The operating room (room, lights, table, draped patient, skin window, opened chest,
+# equipment, cables, extra instruments): see environment/README.txt.
+ENV_XML = Path(__file__).resolve().parent / "environment" / "environment_simulator.xml"
 # Supine patient, head toward -x, surgeon on the patient's right (-y side):
 # heart anterior (+x in the model) faces up, superior (+z) points to the head,
 # and the patient's left (+y) is away from the surgeon. Native scale (1.0).
@@ -198,12 +206,41 @@ class Tissue:
 
 
 class SkinTissue(Tissue):
-    """The flat skin pad. Its wound and marker lines are part of the static scene."""
+    """The prepped skin in the drape window (the environment's intact skin, geom group 1), queried
+    by ray-casting, so cuts and stitches follow the curve of the chest. The practice area is the
+    pad rectangle; its laceration and marker lines are drawn on the skin each frame."""
+    SKIN_GROUP = 1
+
+    def __init__(self, model, data, site):
+        super().__init__(model, data, site)
+        self.skin_only = np.zeros(6, np.uint8)
+        self.skin_only[self.SKIN_GROUP] = 1
+        self.wound = self._laceration()
 
     def height(self, x, y):
         if PAD_MIN[0] <= x <= PAD_MAX[0] and PAD_MIN[1] <= y <= PAD_MAX[1]:
-            return PAD_TOP
+            return self.probe(x, y, self.skin_only)[0]
         return None
+
+    def _laceration(self):
+        """Surgical-marker guide lines (gentian violet) where entry and exit bites go, and the
+        laceration: swollen pink lips around a wet dark-red gap."""
+        geoms, cy = [], PAD_CENTER[1]
+        for y in (cy - .025, cy + .026):
+            for x in np.arange(-.084, .086, .012):
+                a, b = self.point((x - .0035, y), .0002), self.point((x + .0035, y), .0002)
+                if a is not None and b is not None:
+                    geoms.append(surface_strip(a, b, .0006, .0002, self.normal(x, y), "marker"))
+        xs = np.linspace(-.079, .079, 17)
+        for x0, x1 in zip(xs, xs[1:]):
+            a, b = self.point((x0, cy), .0001), self.point((x1, cy), .0001)
+            if a is None or b is None:
+                continue
+            n = self.normal((x0 + x1)/2, cy)
+            taper = max(0.0, 1 - ((x0 + x1)/2 / .079)**2)**.5
+            geoms.append(surface_strip(a, b, .0045*taper + .0004, .0004, n, "lip"))
+            geoms.append(surface_strip(a + n*.0002, b + n*.0002, .0017*taper + .0002, .0005, n, "wound"))
+        return geoms
 
 
 class HeartTissue(Tissue):
@@ -255,6 +292,8 @@ class HeartTissue(Tissue):
         for t0, t1 in zip(ts, ts[1:]):
             a = self.point(site.point(t0, 0), .0003)
             b = self.point(site.point(t1, 0), .0003)
+            if a is None or b is None:      # another heart model (HEART_FILE) may not reach here
+                continue
             taper = 1 - (abs(t0 + t1)/2 / site.half)**2
             n = self.normal(*site.point((t0 + t1)/2, 0))
             geoms.append(surface_strip(a, b, .0012 + .0030*taper, .0004, n, site.lip_material))
@@ -263,6 +302,8 @@ class HeartTissue(Tissue):
             for side in (-site.bite_guide, site.bite_guide):
                 xy = site.point(site.slot(k), side)
                 c = self.point(xy, .0002)
+                if c is None:
+                    continue
                 n = self.normal(*xy)
                 geoms.append(surface_strip(c, c + 1e-5*_tangent(n), .0007, .0002, n, "target"))
         return geoms
@@ -271,10 +312,11 @@ class HeartTissue(Tissue):
 def make_tissue(model, data, site, task=None):
     """The tissue of `site`; on the heart, the laceration is shown only for suturing, free
     stitching and free practice (`task`), not for an incision or the bypass."""
-    if site.name == "skin":
-        return SkinTissue(model, data, site)
-    laceration = None if task is None else task in ("suture", "stitch", "free")
-    return HeartTissue(model, data, site, laceration)
+    with heart_home():                         # a lifted heart is put back while the site is built
+        if site.name == "skin":
+            return SkinTissue(model, data, site)
+        laceration = None if task is None else task in ("suture", "stitch", "free")
+        return HeartTissue(model, data, site, laceration)
 
 
 def _tangent(n):
@@ -339,14 +381,22 @@ def _heart_xml():
     geoms = []
     HEART_GEOMS.clear()
     for geom in root.iter("geom"):
-        if geom.get("class") != "visual":
+        if geom.get("class") != "visual" or HEART_FILE:
             continue
         material = geom.get("material")
         name = f"heart_{geom.get('mesh')}"
         HEART_GEOMS[name] = material
         geoms.append(f'<geom name="{name}" type="mesh" mesh="{geom.get("mesh")}" '
                      f'material="{_heart_material(material)}" group="{HEART_GROUP}"/>')
-    body = (f'<body name="heart" pos="{_fmt(HEART_POS)}" xyaxes="{HEART_AXES}">'
+    if HEART_FILE:   # another heart model, centred where the NIH heart is
+        centre = obj_center([data for path, data in files.items() if path.endswith(".obj")])
+        files["heart-custom/heart.obj"] = heart_obj(HEART_FILE, centre)
+        assets.append('<mesh name="custom" file="heart-custom/heart.obj"/>')
+        HEART_GEOMS["heart_custom"] = HEART_MUSCLE_MATERIAL
+        geoms.append(f'<geom name="heart_custom" type="mesh" mesh="custom" '
+                     f'material="{_heart_material(HEART_MUSCLE_MATERIAL)}" group="{HEART_GROUP}"/>')
+    # mocap: the viewer can lift it out, move and turn it (environment/or_controls.py)
+    body = (f'<body name="heart" mocap="true" pos="{_fmt(HEART_POS)}" xyaxes="{HEART_AXES}">'
             + "".join(geoms) + "</body>")
     return assets, body, files
 
@@ -447,49 +497,13 @@ def _lookat(position, target):
 
 
 def _scene_xml():
-    main_light = np.array([-.30, .26, 1.86])
-    main_dir = _lookat(main_light, [*INCISION_CENTER, WORK_TOP])
-    side_light = np.array([.46, -.18, 1.92])
-    side_dir = _lookat(side_light, [*INCISION_CENTER, WORK_TOP])
     g = []   # static geometry, one line each
     add = g.append
 
-    # Room shell: floor, tiled walls with stainless bumper rail, panel ceiling.
-    add('<geom type="plane" pos="0 .3 0" size="3.3 3 .05" material="floor"/>')
-    for pos, size in (("0 3.05 1.5", "3.3 .05 1.5"), ("0 -2.65 1.5", "3.3 .05 1.5"),
-                      ("-3.25 .2 1.5", ".05 2.9 1.5"), ("3.25 .2 1.5", ".05 2.9 1.5")):
-        add(f'<geom type="box" pos="{pos}" size="{size}" material="tile"/>')
-    add('<geom type="box" pos="0 .2 3.03" size="3.3 2.9 .03" material="ceiling"/>')
-    for pos, size in (("0 2.985 .95", "3.2 .02 .035"), ("-3.185 .2 .95", ".02 2.8 .035"),
-                      ("3.185 .2 .95", ".02 2.8 .035"), ("0 2.99 .07", "3.2 .02 .07")):
-        add(f'<geom type="box" pos="{pos}" size="{size}" material="satin"/>')
-    for x in (-1.6, 1.6):
-        for y in (-.8, 1.6):
-            add(f'<geom type="box" pos="{x} {y} 2.995" size=".6 .3 .01" material="panel"/>')
-
-    # Sliding OR door with a vision panel, wall-mounted PACS display, storage cabinets.
-    add('<geom type="box" pos="1.75 2.985 1.1" size=".8 .03 1.1" material="satin"/>')
-    add('<geom type="box" pos="1.75 2.96 1.45" size=".18 .01 .25" material="glass"/>')
-    add('<geom type="box" pos="-1.0 2.975 1.65" size=".62 .04 .36" material="black"/>')
-    add('<geom type="box" pos="-1.0 2.93 1.65" size=".58 .005 .32" material="xray"/>')
-    for y in (-1.6, -.5, .6):
-        add(f'<geom type="box" pos="-3.0 {y} 1.55" size=".2 .52 .55" material="satin"/>')
-        add(f'<geom type="box" pos="-2.795 {y} 1.55" size=".004 .48 .5" material="glass"/>')
-        add(f'<geom type="box" pos="-3.0 {y} .45" size=".2 .52 .42" material="satin"/>')
-
-    # OR table: pedestal, column and black mattress under the drape.
-    add('<geom type="box" pos=".05 .06 .04" size=".42 .24 .04" material="plastic_dark"/>')
-    add('<geom type="box" pos=".05 .06 .40" size=".16 .12 .34" material="satin"/>')
-    add('<geom type="box" pos=".05 .06 .765" size="1.1 .27 .035" material="black"/>')
-
-    # Sterile drapes over the patient: hanging sides, body, legs, anaesthesia screen.
-    add(f'<geom type="box" pos=".05 .06 {TABLE_TOP - .006}" size="1.12 .29 .006" material="drape"/>')
-    for y in (-.235, .355):
-        add(f'<geom type="box" pos=".05 {y} .58" size="1.12 .004 .24" material="drape"/>')
-    add('<geom type="box" pos="1.172 .06 .58" size=".004 .30 .24" material="drape"/>')
+    # Room, OR table, drapes, lights and equipment: ENV_XML (included below).
     # Both operating sites are in the model; the viewer shows one at a time by group.
-    _skin_window(lambda line: add(line.replace("<geom ", '<geom group="1" ', 1)))
-    _open_chest(lambda line: add(line.replace("<geom ", '<geom group="3" ', 1)))
+    # (ENV_XML: intact skin in group 1 - the skin site works on it directly, see SkinTissue -
+    # and the opened chest around the heart in group 3)
     add('<body name="site_switch_a"/>')    # anchors for the site switch (see SITE_SWITCH)
     add('<body name="site_switch_b"/>')
     # Double-click targets for the hands (see PICK_GROUP): nearly invisible spheres that the
@@ -497,13 +511,6 @@ def _scene_xml():
     for side in ("left", "right"):
         add(f'<body name="pick_{side}" mocap="true" pos="0 0 -5"><geom type="sphere" size=".045" '
             f'group="{PICK_GROUP}" rgba=".5 .5 .5 .002" contype="0" conaffinity="0"/></body>')
-    add('<geom type="ellipsoid" pos=".62 .06 .815" size=".56 .24 .075" material="drape"/>')
-    add('<geom type="ellipsoid" pos="1.10 .00 .845" size=".04 .05 .06" material="drape"/>')
-    add('<geom type="ellipsoid" pos="1.10 .12 .845" size=".04 .05 .06" material="drape"/>')
-    add('<geom type="box" pos="-.68 .06 1.14" size=".004 .36 .32" material="drape"/>')
-    add('<geom type="capsule" fromto="-.68 -.31 1.47 -.68 .43 1.47" size=".008" material="steel"/>')
-    for y in (-.31, .43):
-        add(f'<geom type="capsule" fromto="-.68 {y} .80 -.68 {y} 1.47" size=".008" material="steel"/>')
 
     # Mayo stands: stainless trays on a cantilever arm, post and wheeled base behind the table.
     for (tx, ty), (hx, hy) in TRAYS:
@@ -525,32 +532,6 @@ def _scene_xml():
                 f'material="satin"/>')
             add(f'<geom type="sphere" pos="{fx:.3f} {fy:.3f} .025" size=".025" material="black"/>')
 
-    # Ceiling-mounted surgical lights on articulated booms.
-    for centre, direction, radius in ((main_light, main_dir, .30), (side_light, side_dir, .22)):
-        add(f'<geom type="capsule" fromto="{centre[0]} {centre[1]} 3.0 {centre[0]} {centre[1]} 2.35" '
-            f'size=".035" material="plastic_white"/>')
-        elbow = centre - direction*.05 + np.array([0, 0, .35])
-        add(f'<geom type="capsule" fromto="{centre[0]} {centre[1]} 2.35 {_fmt(elbow)}" size=".028" '
-            f'material="plastic_white"/>')
-        add(f'<geom type="capsule" fromto="{_fmt(elbow)} {_fmt(centre - direction*.05)}" size=".022" '
-            f'material="plastic_white"/>')
-        add(f'<geom type="cylinder" pos="{_fmt(centre)}" zaxis="{_fmt(-direction)}" '
-            f'size="{radius} .035" material="plastic_white"/>')
-        lens = centre + direction*.036
-        add(f'<geom type="cylinder" pos="{_fmt(lens)}" zaxis="{_fmt(-direction)}" '
-            f'size="{radius*.93} .002" material="lamp_lens"/>')
-        right = np.cross(direction, [0, 0, 1])
-        right /= np.linalg.norm(right)
-        up = np.cross(right, direction)
-        for k in range(7):
-            ring = 0 if k == 0 else radius*.55
-            a = k*2*np.pi/6
-            pod = lens + direction*.003 + ring*(np.cos(a)*right + np.sin(a)*up)
-            add(f'<geom type="cylinder" pos="{_fmt(pod)}" zaxis="{_fmt(-direction)}" '
-                f'size="{radius*.15:.3f} .004" material="lamp_led"/>')
-        add(f'<geom type="capsule" fromto="{_fmt(lens + direction*.004)} {_fmt(lens + direction*.09)}" '
-            f'size=".018" material="plastic_white"/>')
-
     # Patient monitor on a pole, facing the surgeon. Traces are drawn live each frame.
     n, r, u = MONITOR_NORMAL, MONITOR_RIGHT, MONITOR_UP
     c = MONITOR_CENTER
@@ -562,36 +543,8 @@ def _scene_xml():
         f'size=".018" material="satin"/>')
     add(f'<geom type="box" pos="{c[0]} {c[1] + .06} .03" size=".22 .22 .03" material="plastic_dark"/>')
 
-    # Anaesthesia workstation and IV pole at the head end, behind the screen.
-    add('<geom type="box" pos="-1.25 .75 .62" size=".32 .30 .58" material="plastic_white"/>')
-    add('<geom type="box" pos="-1.25 .44 .95" size=".28 .012 .17" material="plastic_dark"/>')
-    add('<geom type="box" pos="-1.25 .43 .95" size=".25 .004 .14" material="screen"/>')
-    add('<geom type="box" pos="-1.25 .55 1.45" size=".24 .14 .16" material="plastic_dark"/>')
-    for x, colour in ((-1.38, "gas_o2"), (-1.25, "gas_air"), (-1.12, "gas_n2o")):
-        add(f'<geom type="cylinder" pos="{x} .43 .42" zaxis="0 -1 0" size=".03 .01" material="{colour}"/>')
-    add('<geom type="capsule" fromto="-.95 .55 .05 -.95 .55 1.95" size=".012" material="steel"/>')
-    add('<geom type="ellipsoid" pos="-.95 .55 1.72" size=".05 .025 .1" material="iv_bag"/>')
-    add('<geom type="capsule" fromto="-.95 .55 1.62 -.70 .30 .95" size=".003" material="iv_bag"/>')
-    add('<geom type="box" pos="-.95 .55 .03" size=".22 .22 .02" material="satin"/>')
-
-    # Back table with sterile drape and kick bucket for the scrub nurse.
-    add('<geom type="box" pos="1.6 .3 .45" size=".45 .75 .45" material="satin"/>')
-    add('<geom type="box" pos="1.6 .3 .905" size=".47 .77 .006" material="drape"/>')
-    add('<geom type="box" pos="1.12 .3 .70" size=".006 .77 .21" material="drape"/>')
-    add('<geom type="cylinder" pos=".95 -.7 .22" size=".17 .22" material="satin"/>')
-
     heart_lines, heart_body, _ = _heart_xml()
     heart_assets = "\n    ".join(heart_lines)
-    lights = f"""
-    <light name="surgical_main" type="spot" pos="{_fmt(main_light)}" dir="{_fmt(main_dir)}"
-           cutoff="70" exponent="12" castshadow="true" bulbradius=".16"
-           diffuse=".95 .95 .92" specular=".55 .55 .55" ambient="0 0 0"/>
-    <light name="surgical_side" type="spot" pos="{_fmt(side_light)}" dir="{_fmt(side_dir)}"
-           cutoff="70" exponent="10" castshadow="false"
-           diffuse=".35 .35 .35" specular=".2 .2 .2" ambient="0 0 0"/>
-    <light name="room" type="directional" pos="0 0 2.9" dir=".15 .35 -1" castshadow="false"
-           diffuse=".36 .37 .37" specular=".05 .05 .05" ambient=".26 .27 .27"/>
-    """
     return f"""
 <mujoco model="Operating room">
   <visual>
@@ -601,6 +554,7 @@ def _scene_xml():
     <map znear=".006" zfar="30" haze=".2" shadowclip="2.5" shadowscale=".6" fogstart="1000" fogend="1001"/>
     <rgba haze=".72 .78 .78 1"/>
   </visual>
+  <include file="{ENV_XML.as_posix()}"/>
   <asset>
     <texture name="floor" type="2d" file="floor.png"/>
     <texture name="tile" type="2d" file="tile.png"/>
@@ -673,61 +627,14 @@ def _scene_xml():
     <weld name="AI Assistant" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="AI Voice" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Gemma review" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    {button_xml("site_switch_a", "site_switch_b")}
   </equality>
   <worldbody>
-    {lights}
     {chr(10).join("    " + line for line in g)}
     {heart_body}
   </worldbody>
 </mujoco>
 """
-
-
-def _skin_window(add):
-    # Closed, draped torso with a betadine-prepped skin window over the abdomen.
-    add('<geom type="ellipsoid" pos="-.02 .06 .84" size=".50 .23 .112" material="drape"/>')
-    add('<geom type="ellipsoid" pos="-.40 .06 .835" size=".30 .25 .095" material="drape"/>')
-    (cx, cy), (hx, hy) = PAD_CENTER, PAD_HALF
-    add(f'<geom type="box" pos="{cx} {cy} {PAD_TOP - .0055}" size="{hx} {hy} .0055" material="skin"/>')
-    w = .016
-    for pos, size in (((cx, cy - hy - w + .004), (hx + 2*w, w)), ((cx, cy + hy + w - .004), (hx + 2*w, w)),
-                      ((cx - hx - w + .004, cy), (w, hy)), ((cx + hx + w - .004, cy), (w, hy))):
-        add(f'<geom type="box" pos="{pos[0]:.4f} {pos[1]:.4f} {PAD_TOP + .0006}" '
-            f'size="{size[0]:.4f} {size[1]:.4f} .0012" material="drape"/>')
-    # Surgical-marker guide lines (gentian violet) where entry and exit bites go.
-    for y in (cy - .025, cy + .026):
-        for x in np.arange(-.084, .086, .012):
-            add(f'<geom type="box" pos="{x:.3f} {y} {PAD_TOP + .0002}" size=".0035 .0006 .0002" '
-                f'material="marker"/>')
-    # The laceration to repair: swollen pink lips around a wet dark-red gap.
-    add(f'<geom type="ellipsoid" pos="0 {cy} {PAD_TOP + .0001}" size=".079 .0045 .0004" '
-        f'material="lip"/>')
-    add(f'<geom type="ellipsoid" pos="0 {cy} {PAD_TOP + .0003}" size=".075 .0017 .0005" '
-        f'material="wound"/>')
-
-
-def _open_chest(add):
-    # Draped chest around a median sternotomy: the drapes frame the opening.
-    add('<geom type="ellipsoid" pos="-.46 .06 .84" size=".22 .25 .11" material="drape"/>')
-    add('<geom type="ellipsoid" pos=".27 .06 .84" size=".18 .24 .105" material="drape"/>')
-    add('<geom type="ellipsoid" pos="-.07 -.14 .84" size=".26 .075 .088" material="drape"/>')
-    add('<geom type="ellipsoid" pos="-.07 .25 .84" size=".26 .075 .088" material="drape"/>')
-    # Mediastinum: dark pericardial well under the heart, cut pericardial edges, and
-    # the retracted sternal halves wrapped in white laparotomy sponges.
-    add('<geom type="ellipsoid" pos="-.07 .055 .85" size=".19 .12 .04" material="pericardium"/>')
-    for y, inward in ((-.07, 1), (.18, -1)):
-        add(f'<geom type="box" pos="-.09 {y} .918" size=".165 .010 .010" material="sternum"/>')
-        add(f'<geom type="capsule" fromto="-.25 {y + inward*.004} .931 .07 {y + inward*.004} .931" '
-            f'size=".0075" material="sponge"/>')
-        add(f'<geom type="capsule" fromto="-.24 {y + inward*.016} .905 .06 {y + inward*.016} .905" '
-            f'size=".006" material="pericardium"/>')
-    # Finochietto sternal retractor: rack across the foot end, blades on both edges.
-    add('<geom type="box" pos=".105 .055 .955" size=".007 .20 .004" material="satin"/>')
-    for y in (-.074, .184):
-        add(f'<geom type="box" pos=".065 {y} .953" size=".04 .005 .003" material="steel"/>')
-        add(f'<geom type="box" pos=".025 {y} .932" size=".035 .002 .022" material="steel"/>')
-    add('<geom type="cylinder" pos=".105 -.16 .975" zaxis="0 0 1" size=".014 .012" material="satin"/>')
-    add('<geom type="box" pos=".105 -.185 .975" size=".004 .03 .004" material="satin"/>')
 
 
 def build_model():

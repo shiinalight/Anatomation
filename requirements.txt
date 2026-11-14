@@ -1,2 +1,2 @@
-mujoco
+mujoco>=4.0.1
 numpy
