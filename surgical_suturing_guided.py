@@ -23,7 +23,8 @@ from procedures import DEFAULT, PROCEDURES, from_site, make_procedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
                       surface_strip, ASSISTANT_BUTTON, AUTOPILOT_BUTTON, CLEAR_BUTTON,
-                      GUIDE_BUTTON, PROCEDURES_BUTTON, RESET_HANDS_BUTTON, REVIEW_BUTTON, VOICE_BUTTON,
+                      BOTH_HANDS_BUTTON, GUIDE_BUTTON, PROCEDURES_BUTTON, RESET_HANDS_BUTTON,
+                      REVIEW_BUTTON, VOICE_BUTTON,
                       PanelButton,
                       PanelToggle)
 
@@ -58,6 +59,7 @@ TOOL_HOME = (
 TOOL_TIP = (.051, .084, .062, .050)
 SWITCH_HAND = ord("Z")    # keyboard control moves to the other hand (it also follows the steps)
 RESET_HANDS = 0x10000     # from the panel's Reset hands button (a code no keyboard key sends)
+BOTH_HANDS = ord("Y")     # toggles moving both hands together (also the Both hands button)
 PULL_HEIGHT = .009        # forceps lift that pulls the suture through after the needle exits
 THROWS = ("double wrap", "single wrap, reversed", "single wrap, squares the knot")
 # GLFW key code -> (axis, metres per tap). Holding a key moves at MOVE_SPEED * step / s.
@@ -514,6 +516,7 @@ class CuttingStation:
         self.procedure = make_procedure(self.task, tissue)
         self.hands = {side: Hand(side) for side in SIDES}
         self.active = "right"
+        self.both = False             # arrows and Q/E move both hands together
         self.need = None              # hand the current step needs (keyboard follows it)
         self.marks = deque(maxlen=450)
         self.stitches = []
@@ -551,6 +554,11 @@ class CuttingStation:
 
     def note(self, kind, **detail):
         self.log.append((kind, detail))
+
+    def moving_hands(self):
+        """The hands the arrows and Q/E move: the active one, or both."""
+        hands = self.hands.values() if self.both else [self.hands[self.active]]
+        return [hand for hand in hands if hand.pose is not None]
 
     def other(self, hand):
         return self.hands[OTHER[hand.side]]
@@ -632,11 +640,10 @@ class CuttingStation:
 
         for key in keys:
             self.key(key)
-        active = self.hands[self.active]
-        if active.pose is not None:
+        for moving in self.moving_hands():
             for code, amount in held:
-                if not self.guided_lowering(active, code):
-                    self.move(active, code, amount)
+                if not self.guided_lowering(moving, code):
+                    self.move(moving, code, amount)
 
         for hand in self.hands.values():
             if hand.pose is None:
@@ -749,16 +756,22 @@ class CuttingStation:
         if code == RESET_HANDS:
             self.reset_hands()
             return
+        if code == BOTH_HANDS:
+            self.both = not self.both
+            self.inform("Arrows and Q/E move both hands" if self.both else
+                        f"Arrows and Q/E move the {self.active} hand (Z swaps)")
+            return
         if hand.pose is None:
             return
         if code in MOVES:
-            if self.guided_lowering(hand, code):
-                # Guided needle lowering stays in discrete taps.
-                if hand.guide_lower_steps:
-                    hand.guide_tip[2] += MOVES[code][1]
-                    hand.guide_lower_steps -= 1
-            else:
-                self.move(hand, code, MOVES[code][1])
+            for moving in self.moving_hands():
+                if self.guided_lowering(moving, code):
+                    # Guided needle lowering stays in discrete taps.
+                    if moving.guide_lower_steps:
+                        moving.guide_tip[2] += MOVES[code][1]
+                        moving.guide_lower_steps -= 1
+                else:
+                    self.move(moving, code, MOVES[code][1])
         elif ord("1") <= code <= ord("4"):
             hand.selected = code - ord("1")
             self.inform(f"{hand.label} hand: G (pick up {TOOL_NAMES[hand.selected].lower()})")
@@ -1518,7 +1531,7 @@ VOICE_KEY, REVIEW_KEY, ASSISTANT_KEY = ord("V"), ord("B"), ord("I")
 # Shown at the bottom right, matching the status box at the bottom left (six rows each).
 # K or the Key guide button hides it.
 KEY_GUIDE = (
-    ("KEYS  Hands", "Z other hand (follows steps)   G take / drop"),
+    ("KEYS  Hands", "Z other hand  Y both hands  G take / drop"),
     ("Tools", "1 scalpel 2 needle 3 forceps 4 scissors"),
     ("Move", "arrows move   Q/E up/down   N align"),
     ("Act", "F grip / pass needle   T throw   X trim"),
@@ -1555,7 +1568,7 @@ def draw_user(scene, hands, station, now):
     """Everything that moves: gloves, instruments, wounds, sutures and the patient monitor."""
     scene.ngeom = 0
     for side, points in hands.items():
-        draw_hand(scene, points, side == station.active)
+        draw_hand(scene, points, station.both or side == station.active)
     station.draw(scene, now)
     draw_monitor(scene, now)
 
@@ -1635,6 +1648,7 @@ def display(gloves, preview, procedure):
     site = SITES[procedure.site]
     procedures_button = PanelButton(model, data, PROCEDURES_BUTTON)
     reset_hands_button = PanelButton(model, data, RESET_HANDS_BUTTON)
+    both_toggle = PanelToggle(model, data, BOTH_HANDS_BUTTON)
     clear_button = PanelButton(model, data, CLEAR_BUTTON)
     review_button = PanelButton(model, data, REVIEW_BUTTON)
     assistant_button = PanelButton(model, data, ASSISTANT_BUTTON)
@@ -1685,6 +1699,7 @@ def display(gloves, preview, procedure):
           "H re-aims the gloves: press H, then rest your hands flat with fingers toward the screen.\n"
           "M mutes or unmutes the OR sounds.\n"
           "Procedures window (dropdown): pick incision, suture, bypass or free practice; P cycles.\n"
+          "Y (or the Both hands button) makes the arrows and Q/E move both hands together.\n"
           "Panel (Equality, right): Procedures (reopens it), Reset hands (hands and view back to\n"
           "      the surgeon's view), Clear repair, Key guide (or K),\n"
           "      Autopilot (replays the best recorded attempt), AI Assistant (I), AI Voice (V),\n"
@@ -1729,6 +1744,8 @@ def display(gloves, preview, procedure):
                     show_guide = bool(data.eq_active[guide_id])
                     if procedures_button.pressed():
                         open_picker()
+                    if both_toggle.changed() and both_toggle.on != session.station.both:
+                        pressed.append(BOTH_HANDS)       # recorded like a key, so replays stay exact
                     if reset_hands_button.pressed():
                         pressed.append(RESET_HANDS)      # recorded like a key, so replays stay exact
                         bench_view(model, data, viewer.cam, site.zoom, site.focus)
@@ -1795,6 +1812,8 @@ def display(gloves, preview, procedure):
                     draw_user(viewer.user_scn, drawn, session.station, now)
                     if voice_toggle.on != coach.voice_on:
                         voice_toggle.set(coach.voice_on)
+                    if both_toggle.on != session.station.both:
+                        both_toggle.set(session.station.both)    # Y, or a fresh station
                 for event in session.station.events:
                     sounds.play(event)
                 session.station.events.clear()
@@ -1806,8 +1825,8 @@ def display(gloves, preview, procedure):
                 if overlay is not None and now >= next_overlay:
                     station = session.station
                     left, right = station.hands["left"], station.hands["right"]
-                    tool_status = (f"L {left.tool}   R {right.tool}   "
-                                   f"(keys: {station.active}, Z)")
+                    keys_for = "both hands, Y" if station.both else f"{station.active}, Z"
+                    tool_status = f"L {left.tool}   R {right.tool}   (keys: {keys_for})"
                     if session.autopilot is not None:
                         pilot = session.autopilot
                         action = ("AUTOPILOT finished: Autopilot button off to take over" if pilot.done else
