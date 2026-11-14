@@ -90,7 +90,7 @@ class Tissue:
         self.heart_only[HEART_GROUP] = 1
         self.visible = np.array([1, 1, 1, 0, 0, 0], np.uint8)
         self.muscle = {mj.mj_name2id(model, mj.mjtObj.mjOBJ_GEOM, name)
-                       for name in HEART_GEOMS if HEART_GEOMS[name] == "myocardium"}
+                       for name in HEART_GEOMS if HEART_GEOMS[name] == HEART_MUSCLE_MATERIAL}
         self._id = np.zeros(1, np.int32)
         self.wound = self._laceration()
 
@@ -167,9 +167,14 @@ def surface_strip(start, end, half_width, half_thickness, normal, material):
 
 
 # --- Heart model import ---------------------------------------------------------------
-# Visual materials: the model's atlas colours (pure red / blue) are swapped for wet tissue.
-HEART_MATERIALS = {"Muscles": "myocardium", "Arteries.001": "artery", "Veins": "vein"}
-HEART_GEOMS = {}   # geom name -> scene material, filled by _heart_xml()
+# Materials come from the model file itself (muscle, arteries, veins), prefixed to
+# avoid clashing with the scene's own material names.
+HEART_MUSCLE_MATERIAL = "Muscles"   # the material that marks heart muscle (cuttable)
+HEART_GEOMS = {}   # geom name -> the model's material name, filled by _heart_xml()
+
+
+def _heart_material(name):
+    return f"heart_{name}"
 
 
 def _heart_xml():
@@ -191,16 +196,19 @@ def _heart_xml():
         files[f"{folder}/{rel}"] = (HEART_DIR / rel).read_bytes()
     for library in HEART_DIR.glob("*.mtl"):        # referenced by the OBJ files
         files[f"{folder}/{library.name}"] = library.read_bytes()
+    for material in root.iter("material"):         # the model's own colours, unchanged
+        attrs = " ".join(f'{key}="{value}"' for key, value in material.attrib.items() if key != "name")
+        assets.append(f'<material name="{_heart_material(material.get("name"))}" {attrs}/>')
     geoms = []
     HEART_GEOMS.clear()
     for geom in root.iter("geom"):
         if geom.get("class") != "visual":
             continue
-        material = HEART_MATERIALS.get(geom.get("material"), "myocardium")
+        material = geom.get("material")
         name = f"heart_{geom.get('mesh')}"
         HEART_GEOMS[name] = material
         geoms.append(f'<geom name="{name}" type="mesh" mesh="{geom.get("mesh")}" '
-                     f'material="{material}" group="{HEART_GROUP}"/>')
+                     f'material="{_heart_material(material)}" group="{HEART_GROUP}"/>')
     body = (f'<body name="heart" pos="{_fmt(HEART_POS)}" xyaxes="{HEART_AXES}">'
             + "".join(geoms) + "</body>")
     return assets, body, files
@@ -498,9 +506,6 @@ def _scene_xml():
     <material name="lamp_led" rgba="1 1 .97 1" emission="1.6"/>
     <material name="glove" rgba=".96 .88 .73 1" specular=".5" shininess=".7"/>
     <material name="lip" rgba=".72 .22 .20 1" specular=".55" shininess=".7"/>
-    <material name="myocardium" rgba=".55 .13 .12 1" specular=".75" shininess=".85"/>
-    <material name="artery" rgba=".68 .16 .14 1" specular=".8" shininess=".85"/>
-    <material name="vein" rgba=".30 .12 .30 1" specular=".8" shininess=".85"/>
     <material name="pericardium" rgba=".26 .07 .06 1" specular=".55" shininess=".75"/>
     <material name="sternum" rgba=".80 .66 .45 1" specular=".3" shininess=".4"/>
     <material name="sponge" rgba=".93 .92 .88 1" specular=".05"/>
