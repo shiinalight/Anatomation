@@ -70,12 +70,17 @@ ZOOM_OUT = {ord("-"), 333}   # - and keypad -
 RESET_VIEW = ord("0")
 
 
+# The surgeon's view of the table. Not a camera in the model: MuJoCo's viewer can draw
+# model cameras as markers (its Q shortcut), which would float in the scene.
+BENCH_POS = np.array([.28, -.62, 1.43])
+BENCH_FORWARD = np.cross([-.202, .492, .847], [.925, .380, 0])   # -(x axis cross y axis)
+BENCH_FORWARD /= np.linalg.norm(BENCH_FORWARD)
+
+
 def bench_view(model, data, cam, zoom=1.0):
-    """Point the free (mouse-controllable) camera where the bench camera looks; `zoom`
-    below 1 starts closer (the heart site is small)."""
-    cid = model.camera("bench").id
-    position = data.cam_xpos[cid]
-    forward = -data.cam_xmat[cid].reshape(3, 3)[:, 2]
+    """Point the free (mouse-controllable) camera at the repair site from the surgeon's
+    position; `zoom` below 1 starts closer (the heart site is small)."""
+    position, forward = BENCH_POS, BENCH_FORWARD
     distance = (WORK_TOP - position[2]) / forward[2]  # aim at the repair site
     cam.type = mj.mjtCamera.mjCAMERA_FREE
     cam.lookat[:] = position + forward*distance
@@ -740,6 +745,30 @@ class CuttingStation:
 
 SWITCH_SITE = ord("P")
 
+# MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
+# markers, T transparency, X textures, 0-5 object groups, ...). It keeps its own copy of
+# the options and only takes ours when they change, so after such a key we briefly send
+# the toggled value and then the normal one, which puts the display back.
+VIEWER_FLAG_KEYS = {ord(mj.mjVISSTRING[i][2]): i for i in range(mj.mjtVisFlag.mjNVISFLAG)
+                    if len(mj.mjVISSTRING[i][2]) == 1 and mj.mjVISSTRING[i][2].isalpha()}
+VIEWER_GROUP_KEYS = {ord(str(i)): i for i in range(6)}
+
+
+def undo_viewer_shortcuts(option, key_events, flags, groups):
+    """Send `option` the toggled value of every shortcut pressed an odd number of times
+    in `key_events` (including auto-repeats); the next frame restores `flags`/`groups`."""
+    option.flags[:] = flags
+    option.geomgroup[:] = groups
+    for code in set(key_events):
+        if key_events.count(code) % 2 == 0:
+            continue
+        if code in VIEWER_FLAG_KEYS:
+            i = VIEWER_FLAG_KEYS[code]
+            option.flags[i] = 1 - flags[i]
+        if code in VIEWER_GROUP_KEYS:
+            i = VIEWER_GROUP_KEYS[code]
+            option.geomgroup[i] = 1 - groups[i]
+
 
 def draw_user(scene, points, station, now):
     """Everything that moves: glove, instruments, wounds, sutures and the patient monitor."""
@@ -777,19 +806,17 @@ def display(frames, preview, site):
         with viewer.lock():
             show_site(model, viewer.opt, site)
             bench_view(model, data, viewer.cam, site.zoom)
-            # MuJoCo's viewer has its own one-key shortcuts that overlap ours (Q shows
-            # camera markers, T transparency, X textures, 0-5 object groups, ...).
-            # Keep its display settings fixed so our keys only do what they say.
-            display_flags = viewer.opt.flags.copy()
+            display_flags = viewer.opt.flags.copy()   # normal display; see VIEWER_FLAG_KEYS
         overlay = getattr(viewer, "set_texts", None)
         next_overlay = 0.0
         while viewer.is_running():
             now = time.monotonic()
             dt = min(now - last_frame, .1)
             last_frame = now
-            pressed = []
+            pressed, key_events = [], []
             while not keys.empty():
                 code = keys.get_nowait()
+                key_events.append(code)
                 if code in MOVES and code in held_keys.keys:
                     held_keys.press(code, now)  # OS auto-repeat: continuous motion handles it
                     continue
@@ -799,8 +826,7 @@ def display(frames, preview, site):
 
             # Site switching: the Skin / Heart buttons in the viewer's Equality panel, or P.
             with viewer.lock():
-                viewer.opt.flags[:] = display_flags
-                viewer.opt.geomgroup[:] = station.site.groups
+                undo_viewer_shortcuts(viewer.opt, key_events, display_flags, station.site.groups)
                 clear = clear_button.pressed()
                 choice = switch.poll()
                 if SWITCH_SITE in pressed:

@@ -618,7 +618,6 @@ def _scene_xml():
     {lights}
     {chr(10).join("    " + line for line in g)}
     {heart_body}
-    <camera name="bench" pos=".28 -.62 1.43" xyaxes=".925 .380 0 -.202 .492 .847" fovy="45"/>
   </worldbody>
 </mujoco>
 """
