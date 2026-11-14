@@ -24,6 +24,7 @@ go to the next one. `--procedure` picks where to start:
     mjpython surgical_suturing_guided.py --procedure heart-incision   # incision on the left ventricle
     mjpython surgical_suturing_guided.py --procedure heart-suture     # heart laceration
     mjpython surgical_suturing_guided.py --procedure heart-bypass     # coronary artery bypass graft
+    mjpython surgical_suturing_guided.py --procedure skin-stitch      # free stitching, prompted (also heart-stitch)
     mjpython surgical_suturing_guided.py --procedure skin-free        # free practice (also heart-free)
 
 For live tracking, start the Rokoko Device SDK driver in one Terminal:

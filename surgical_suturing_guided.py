@@ -844,13 +844,36 @@ class CuttingStation:
         if self.exit is not None:
             return None
         site = self.site
-        if self.entry is None:
+        if self.entry is None and self.task == "stitch":
+            along, side = self.chosen_spot()
+        elif self.entry is None:
             along = site.slot(len(self.stitches) % site.stitch_slots)
             side = -site.bite_guide
         else:
             along, entry_side = site.coords(self.entry)
             side = -site.bite_guide*np.sign(entry_side)
         return self.tissue.point(site.point(along, side))
+
+    def chosen_spot(self):
+        """Free stitching: (along, side) of the next first bite, where the trainee chose it.
+        The forceps' grip on an edge (taken for this pass) fixes it; before that it follows
+        the forceps (or else the needle holder) along the wound."""
+        site = self.site
+        forceps = self.holder(2)
+        if forceps is not None and forceps.grip is not None and forceps.grip_pass == self.passes:
+            along, side = site.coords(forceps.grip)
+        else:
+            along = side = None
+            for tool in (forceps, self.holder(1)):
+                if tool is not None and tool.tool_pose is not None:
+                    a, b = site.coords(self.active_tip(tool))
+                    if abs(a) <= site.along_limit and abs(b) <= site.bite_max*3:   # over the wound
+                        along, side = a, b
+                        break
+            if along is None:      # not over the wound yet: the next of the usual places
+                return site.slot(len(self.stitches) % site.stitch_slots), -site.bite_guide
+        along = float(np.clip(along, -site.along_limit*.9, site.along_limit*.9))
+        return along, site.bite_guide*(1.0 if side > 0 else -1.0)
 
     def edge_point(self, target):
         """Where the forceps hold the edge for a needle pass at `target`."""
@@ -1159,6 +1182,8 @@ class CuttingStation:
             edge = "first edge" if self.entry is None else "opposite edge"
         if self.exit is None:
             if not self.edge_held(forceps, self.needle_target()):
+                if self.task == "stitch" and self.entry is None:
+                    return forceps.side, f"arrows to where {n} goes, then N, F (lift the edge)"
                 return forceps.side, head + f"N then F (forceps lift the {edge}, {n})"
             if needle.guide_tip is None:
                 return needle.side, head + f"N (align the needle on the {edge})"
@@ -1218,6 +1243,10 @@ class CuttingStation:
                     ("Pull the suture through (Q)", self.pulled),
                     (f"Instrument tie: throw {min(self.throws + 1, 3)}/3", False)]
 
+        if self.task == "stitch":
+            done = len(self.stitches)
+            return ([(">", f"Stitch {done + 1}, anywhere along the wound ({done} tied)")] +
+                    marks(stitch_items(("first edge", "opposite edge")), "  "))
         if p is None:       # suture the laceration
             slots = self.site.stitch_slots
             done = len(self.stitches)
@@ -1439,8 +1468,8 @@ class Session:
         st = self.station
         if st.procedure is not None:
             return st.procedure.done
-        if st.task == "free":
-            return False       # free practice ends when the trainee starts over
+        if st.task in ("free", "stitch"):
+            return False       # free practice and free stitching end when the trainee starts over
         return len(st.stitches) >= st.site.stitch_slots
 
     def end(self, now):
@@ -1473,8 +1502,8 @@ class Session:
     def start_autopilot(self, now):
         best = self.store.best(self.procedure.key)
         if best is None:
-            self.notice = ("Free practice has no ideal run: choose a procedure for the autopilot"
-                           if self.procedure.task == "free" else
+            self.notice = (f"{self.procedure.label} has no ideal run: choose a guided procedure "
+                           "for the autopilot" if self.procedure.task in ("free", "stitch") else
                            f"No complete {self.procedure.label.lower()} attempt yet: finish one first")
             return False
         summary, blob = best
@@ -1706,7 +1735,7 @@ def display(gloves, preview, procedure):
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the gloves: press H, then rest your hands flat with fingers toward the screen.\n"
           "M mutes or unmutes the OR sounds.\n"
-          "Procedures window (dropdown): pick incision, suture, bypass or free practice; P cycles.\n"
+          "Procedures window (dropdown): pick incision, suture, free stitching, bypass or free practice; P cycles.\n"
           "Double-click a hand to move it with the arrows; Y (or the Both hands button) moves both.\n"
           "Panel (Equality, right): Procedures (reopens it), Reset hands (hands back to their\n"
           "      start), Clear repair, Key guide (or K),\n"

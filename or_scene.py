@@ -269,11 +269,11 @@ class HeartTissue(Tissue):
 
 
 def make_tissue(model, data, site, task=None):
-    """The tissue of `site`; on the heart, the laceration is shown only for suturing and
-    free practice (`task`), not for an incision or the bypass."""
+    """The tissue of `site`; on the heart, the laceration is shown only for suturing, free
+    stitching and free practice (`task`), not for an incision or the bypass."""
     if site.name == "skin":
         return SkinTissue(model, data, site)
-    laceration = None if task is None else task in ("suture", "free")
+    laceration = None if task is None else task in ("suture", "stitch", "free")
     return HeartTissue(model, data, site, laceration)
 
 

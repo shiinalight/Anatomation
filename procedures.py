@@ -4,7 +4,9 @@ Each procedure is a site (where: skin or heart) plus a task (what):
   incision  cut along a marked line, the other hand steadying the tissue
   suture    repair the laceration, stitch by stitch
   bypass    the guided coronary artery bypass (heart only, see bypass.py)
-  free      no prompts and no forced order; the two-hand rules still apply
+  stitch    free stitching: stitches anywhere along the laceration, any number, with the
+            stitch technique prompted step by step
+  free      no prompts and no forced order; cutting needs no steadying hand
 """
 
 from dataclasses import dataclass
@@ -20,16 +22,18 @@ class Procedure:
     key: str
     label: str
     site: str        # key in or_scene.SITES (geometry, visible groups, camera)
-    task: str        # incision / suture / bypass / free
+    task: str        # incision / suture / stitch / bypass / free
 
 
 PROCEDURES = {p.key: p for p in (
     Procedure("skin-incision", "Skin: incision", "skin", "incision"),
     Procedure("skin-suture", "Skin: suture the laceration", "skin", "suture"),
+    Procedure("skin-stitch", "Skin: free stitching", "skin", "stitch"),
     Procedure("skin-free", "Skin: free practice", "skin", "free"),
     Procedure("heart-incision", "Heart: incision on the left ventricle", "heart", "incision"),
     Procedure("heart-suture", "Heart: suture the laceration", "heart", "suture"),
     Procedure("heart-bypass", "Heart: coronary artery bypass", "bypass", "bypass"),
+    Procedure("heart-stitch", "Heart: free stitching", "heart", "stitch"),
     Procedure("heart-free", "Heart: free practice", "heart", "free"),
 )}
 DEFAULT = "skin-suture"
@@ -79,7 +83,7 @@ HEART_LINE = Incision("left ventricle incision", INCISION_CENTER, SITES["heart"]
 
 
 def make_procedure(task, tissue):
-    """The guided procedure object for a task, or None (suture and free are run by the station)."""
+    """The guided procedure object for a task, or None (suture, stitch and free are run by the station)."""
     if task == "bypass":
         return BypassProcedure(tissue)
     if task == "incision":
