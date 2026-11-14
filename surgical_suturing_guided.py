@@ -13,6 +13,7 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
+from bypass import BypassProcedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
                       surface_strip, CLEAR_BUTTON, GUIDE_BUTTON, PanelButton, SiteSwitch)
@@ -77,13 +78,15 @@ BENCH_FORWARD = np.cross([-.202, .492, .847], [.925, .380, 0])   # -(x axis cros
 BENCH_FORWARD /= np.linalg.norm(BENCH_FORWARD)
 
 
-def bench_view(model, data, cam, zoom=1.0):
+def bench_view(model, data, cam, zoom=1.0, focus=None):
     """Point the free (mouse-controllable) camera at the repair site from the surgeon's
     position; `zoom` below 1 starts closer (the heart site is small)."""
     position, forward = BENCH_POS, BENCH_FORWARD
     distance = (WORK_TOP - position[2]) / forward[2]  # aim at the repair site
     cam.type = mj.mjtCamera.mjCAMERA_FREE
     cam.lookat[:] = position + forward*distance
+    if focus is not None:
+        cam.lookat[:2] = focus
     cam.distance = distance*zoom
     cam.azimuth = np.degrees(np.arctan2(forward[1], forward[0]))
     cam.elevation = np.degrees(np.arcsin(forward[2]))
@@ -378,6 +381,8 @@ class CuttingStation:
     def __init__(self, tissue):
         self.tissue = tissue
         self.site = tissue.site
+        self.procedure = BypassProcedure(tissue) if self.site.procedure == "cabg" else None
+        self.cut_line = None     # marked incision the scalpel is guided along (bypass)
         self.marks = deque(maxlen=450)
         self.stitches = []
         self.entry = None
@@ -411,6 +416,7 @@ class CuttingStation:
         self.rest[self.held] = (np.array([x, y, self.tissue.rest_height(x, y) + .004]), flat)
         self.events.append("setdown")
         self.held = self.tool_pose = self.previous_tip = self.tissue_grip = None
+        self.cut_line = None
         self.pinch_finger = None
         self.guide_tip = None
         self.guide_lower_steps = 0
@@ -470,6 +476,8 @@ class CuttingStation:
             self.tool_pose = self.pose_for_tool(pose)
 
     def action_prompt(self):
+        if self.procedure is not None:
+            return self.procedure.prompt(self)
         if self.held != 1:
             return self.message
         if self.exit is not None:
@@ -506,10 +514,27 @@ class CuttingStation:
     def move(self, code, amount, pose):
         axis = MOVES[code][0]
         self.update_tool_pose(pose)
+        if self.cut_line is not None and self.held == 0 and axis != 1:
+            if axis == 0:
+                self.slide_along_cut(amount)
+            else:
+                self.offset[2] += amount
+            return
+        self.cut_line = None
         self.guide_tip = None
         self.guide_lower_steps = 0
         limit = .75 if axis < 2 else .45
         self.offset[axis] = np.clip(self.offset[axis]+amount, -limit, limit)
+
+    def slide_along_cut(self, amount):
+        """Move the blade along the marked line, keeping its depth below the surface."""
+        line, tip = self.cut_line, self.active_tip()
+        along, _ = line.coords(tip)
+        below = (self.tissue.any_height(*tip[:2]) or tip[2]) - tip[2]
+        along = float(np.clip(along + amount*.5, -line.half - .003, line.half + .003))
+        xy = line.point(along)
+        target = np.array([*xy, self.tissue.any_height(*xy) - below])
+        self.offset += target - tip
 
     def guided_lowering(self, code):
         return self.held == 1 and self.guide_tip is not None and code == ord("E")
@@ -537,6 +562,10 @@ class CuttingStation:
             self.update_tool_pose(pose)
             self.stitch(code)
         elif code == ord("N"):
+            if self.procedure is not None and self.held is not None:
+                self.tool_pose = self.pose_for_tool(pose)
+                if self.procedure.align(self):
+                    return
             if self.held == 2:
                 self.tool_pose = self.pose_for_tool(pose)
                 target = self.tissue.point(self.site.point(*self.site.forceps_target), .003)
@@ -574,6 +603,9 @@ class CuttingStation:
             self.guide_tip = None
             self.guide_lower_steps = 0
             self.blood.clear()
+            self.cut_line = None
+            if self.procedure is not None:
+                self.procedure = BypassProcedure(self.tissue)
             self.message = "G (pick up selected tool or set it down)"
 
     def stitch(self, action):
@@ -610,6 +642,14 @@ class CuttingStation:
         if self.held != 1:
             self.message = "G set down, then 2 + G: needle holder"
             return
+        if self.procedure is not None:
+            if action == ord("T") and self.procedure.tie(self):
+                return
+            if action == ord("F"):
+                if self.guide_tip is not None and self.guide_lower_steps:
+                    return
+                if self.procedure.puncture(self, self.active_tip()):
+                    return
         if action == ord("T"):
             if self.exit is None:
                 self.message = "Pass the needle through both sides first"
@@ -664,6 +704,9 @@ class CuttingStation:
             self.previous_tip = None
             return
         surface = self.tissue.height(*tip[:2])
+        on_line = self.procedure is not None and self.procedure.cut_allowed(tip)
+        if on_line:
+            surface = self.tissue.any_height(*tip[:2])
         if surface is None or tip[2] > surface:
             if self.held == 0 and self.tissue.on_vessel(*tip[:2]):
                 vessel_top = self.tissue.vessel_top(*tip[:2])
@@ -672,12 +715,14 @@ class CuttingStation:
             self.previous_tip = None
             return
         self.depth = min(MAX_DEPTH, surface - tip[2])
-        normal = self.tissue.normal(*tip[:2])
+        normal = self.tissue.any_normal(*tip[:2]) if on_line else self.tissue.normal(*tip[:2])
         point = np.array([*tip[:2], surface]) + normal*.0007
         if self.previous_tip is not None:
             distance = np.linalg.norm(point-self.previous_tip)
             if .0012 <= distance <= .025:
                 self.marks.append(self.wound_segment(self.previous_tip, point, self.depth, normal))
+                if on_line:
+                    self.procedure.on_cut(self, point)
                 # Deeper cuts ooze: drops appear along the wound and slowly spread.
                 if self.depth > .0012 and np.random.random() < .18 + 40*self.depth:
                     along = (point - self.previous_tip) / distance
@@ -698,10 +743,13 @@ class CuttingStation:
 
     def bleed(self, point, radius):
         xy = point[:2]
-        surface = self.tissue.point(xy, .0004)
+        surface, normal = self.tissue.point(xy, .0004), None
+        if surface is None and hasattr(self.tissue, "any_point"):   # on a vessel
+            surface, normal = self.tissue.any_point(xy, .0004), self.tissue.any_normal(*xy)
         if surface is None:
             return
-        _, _, matrix, _ = surface_strip(surface, surface, 0, 0, self.tissue.normal(*xy), "blood")
+        normal = self.tissue.normal(*xy) if normal is None else normal
+        _, _, matrix, _ = surface_strip(surface, surface, 0, 0, normal, "blood")
         self.blood.append((surface, matrix, self.clock, radius))
 
     def draw(self, scene, now=None):
@@ -716,6 +764,8 @@ class CuttingStation:
         ellipse = mj.mjtGeom.mjGEOM_ELLIPSOID
         for size, pos, matrix, material in self.tissue.wound:
             draw_geom(scene, ellipse, size, pos, matrix, material)
+        if self.procedure is not None:
+            self.procedure.draw(scene, self.clock)
         for segment in self.marks:
             for size, pos, matrix, material in segment:
                 draw_geom(scene, ellipse, size, pos, matrix, material)
@@ -753,7 +803,7 @@ KEY_GUIDE = (
     ("Hand", "G take / drop   arrows move   Q/E up/down"),
     ("Suture", "N align   F puncture   T tie   X trim"),
     ("Reset", "R clear cuts   0 view   H re-aim glove"),
-    ("More", "P skin/heart   M sound   K hide keys"),
+    ("More", "P next site   M sound   K hide keys"),
 )
 
 # MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
@@ -810,14 +860,14 @@ def display(frames, preview, site):
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
           "M mutes or unmutes the OR sounds.\n"
-          "Switch site: Skin / Heart buttons in the Equality panel on the right, or press P.\n"
+          "Switch site: Skin / Heart / Bypass buttons in the Equality panel on the right, or press P.\n"
           "Clear repair (same panel) removes all cuts, blood and stitches and puts the tools back.",
           flush=True)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
         with viewer.lock():
             show_site(model, viewer.opt, site)
-            bench_view(model, data, viewer.cam, site.zoom)
+            bench_view(model, data, viewer.cam, site.zoom, site.focus)
             display_flags = viewer.opt.flags.copy()   # normal display; see VIEWER_FLAG_KEYS
         overlay = getattr(viewer, "set_texts", None)
         next_overlay = 0.0
@@ -845,7 +895,8 @@ def display(frames, preview, site):
                 show_guide = bool(data.eq_active[guide_id])
                 choice = switch.poll()
                 if SWITCH_SITE in pressed:
-                    choice = "heart" if station.site.name == "skin" else "skin"
+                    names = list(SITES)
+                    choice = names[(names.index(station.site.name) + 1) % len(names)]
                     switch.select(choice)
             pressed = [code for code in pressed if code not in (SWITCH_SITE, TOGGLE_GUIDE)]
             if clear and (choice is None or choice == station.site.name):
@@ -859,7 +910,7 @@ def display(frames, preview, site):
                 station = CuttingStation(make_tissue(model, data, site))
                 with viewer.lock():
                     show_site(model, viewer.opt, site)
-                    bench_view(model, data, viewer.cam, site.zoom)
+                    bench_view(model, data, viewer.cam, site.zoom, site.focus)
                 sounds.play("switch")
                 print(f"Operating site: {site.name}", flush=True)
 
@@ -872,10 +923,10 @@ def display(frames, preview, site):
                 with viewer.lock():
                     for code in zoom:
                         if code == RESET_VIEW:
-                            bench_view(model, data, viewer.cam, site.zoom)
+                            bench_view(model, data, viewer.cam, site.zoom, site.focus)
                         else:
                             if viewer.cam.type != mj.mjtCamera.mjCAMERA_FREE:
-                                bench_view(model, data, viewer.cam, site.zoom)
+                                bench_view(model, data, viewer.cam, site.zoom, site.focus)
                             factor = .8 if code in ZOOM_IN else 1.25
                             viewer.cam.distance = float(np.clip(viewer.cam.distance*factor, .03, 6))
 

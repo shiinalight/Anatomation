@@ -64,6 +64,8 @@ class Site:
     lip_material: str
     floor_reflectance: float
     groups: tuple             # visible geom groups: 0 room, 1 skin site, 2 heart, 3 open chest
+    procedure: str = None     # guided multi-step procedure (see bypass.py), or None
+    focus: tuple = None       # where the start view looks (xy), if not the incision centre
 
     @property
     def direction(self):
@@ -103,6 +105,13 @@ SITES = {
                   along_limit=.018, grip_side=.012, grip_along=.021,
                   forceps_target=(-.005, -.006), tail_length=.007, zoom=.7,
                   lip_material="heart_lip", floor_reflectance=0, groups=(1, 0, 1, 1, 0, 0)),
+    # Coronary artery bypass graft on the same heart: see bypass.py for the four steps.
+    "bypass": Site("bypass", "heart", angle=145, half=.015, bite_min=.003, bite_guide=.006,
+                   bite_max=.010, stitch_spacing=.006, stitch_slots=5, exit_tolerance=.004,
+                   along_limit=.018, grip_side=.012, grip_along=.021,
+                   forceps_target=(-.005, -.006), tail_length=.006, zoom=.62,
+                   lip_material="heart_lip", floor_reflectance=0, groups=(1, 0, 1, 1, 0, 0),
+                   procedure="cabg", focus=(-.085, .006)),
 }
 
 TRAY_TOP = 1.012                    # Mayo-stand tray floors, above the draped patient
@@ -193,7 +202,7 @@ class HeartTissue(Tissue):
         self.heart_only[HEART_GROUP] = 1
         self.muscle = {mj.mj_name2id(model, mj.mjtObj.mjOBJ_GEOM, name)
                        for name in HEART_GEOMS if HEART_GEOMS[name] == HEART_MUSCLE_MATERIAL}
-        self.wound = self._laceration()
+        self.wound = self._laceration() if site.procedure is None else []
 
     def height(self, x, y):
         """Heart-muscle surface height at (x, y); None over vessels or off the heart."""
@@ -206,6 +215,23 @@ class HeartTissue(Tissue):
 
     def vessel_top(self, x, y):
         return self.probe(x, y, self.heart_only)[0]
+
+    # Surface queries that include the vessels (muscle, arteries and veins alike).
+    def any_height(self, x, y):
+        return self.probe(x, y, self.heart_only)[0]
+
+    def any_normal(self, x, y, h=.0012):
+        zs = [self.any_height(x + dx, y + dy) for dx, dy in ((h, 0), (-h, 0), (0, h), (0, -h))]
+        if any(z is None for z in zs):
+            return np.array([0., 0., 1.])
+        n = np.array([-(zs[0] - zs[1]) / (2*h), -(zs[2] - zs[3]) / (2*h), 1.])
+        return n / np.linalg.norm(n)
+
+    def any_point(self, xy, lift=0.0):
+        z = self.any_height(*xy[:2])
+        if z is None:
+            return None
+        return np.array([xy[0], xy[1], z]) + self.any_normal(*xy[:2])*lift
 
     def _laceration(self):
         """Static geometry for the wound to repair and its stitch-target dots."""
@@ -228,7 +254,7 @@ class HeartTissue(Tissue):
 
 
 def make_tissue(model, data, site):
-    return (HeartTissue if site.name == "heart" else SkinTissue)(model, data, site)
+    return (SkinTissue if site.name == "skin" else HeartTissue)(model, data, site)
 
 
 def _tangent(n):
@@ -596,6 +622,9 @@ def _scene_xml():
     <material name="sternum" rgba=".80 .66 .45 1" specular=".3" shininess=".4"/>
     <material name="sponge" rgba=".93 .92 .88 1" specular=".05"/>
     <material name="target" rgba=".95 .93 .85 1" specular=".2"/>
+    <material name="button_next" rgba=".3 1 .45 1" emission=".8"/>
+    <material name="graft" rgba=".72 .82 .92 1" specular=".6" shininess=".7"/>
+    <material name="graft_perfused" rgba=".70 .08 .10 1" specular=".8" shininess=".85"/>
     <material name="wound" rgba=".36 .03 .04 1" specular=".95" shininess=".95"/>
     <material name="blood" rgba=".46 .02 .03 1" specular="1" shininess="1"/>
     <material name="thread" rgba=".36 .20 .62 1" specular=".5" shininess=".6"/>
@@ -612,6 +641,7 @@ def _scene_xml():
   <equality>
     <weld name="Skin" body1="site_switch_a" body2="site_switch_b"/>
     <weld name="Heart" body1="site_switch_a" body2="site_switch_b" active="false"/>
+    <weld name="Bypass" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Clear repair" body1="site_switch_a" body2="site_switch_b" active="false"/>
     <weld name="Key guide" body1="site_switch_a" body2="site_switch_b"/>
   </equality>
@@ -676,7 +706,7 @@ def build_model():
     return mj.MjModel.from_xml_string(_scene_xml(), {**_textures(), **_heart_xml()[2]})
 
 
-SITE_SWITCH = {"skin": "Skin", "heart": "Heart"}   # site -> button (equality) name
+SITE_SWITCH = {"skin": "Skin", "heart": "Heart", "bypass": "Bypass"}   # site -> button (equality) name
 CLEAR_BUTTON = "Clear repair"
 GUIDE_BUTTON = "Key guide"
 
@@ -854,7 +884,8 @@ def draw_monitor(scene, t):
 class Sounds:
     SYSTEM = Path("/System/Library/Sounds")
     EVENTS = {"pickup": ("Tink", .35), "setdown": ("Bottle", .18), "puncture": ("Pop", .45),
-              "tie": ("Purr", .5), "trim": ("Tink", .5), "switch": ("Glass", .35)}
+              "tie": ("Purr", .5), "trim": ("Tink", .5), "switch": ("Glass", .35),
+              "complete": ("Hero", .5)}
 
     def __init__(self):
         self.enabled = sys.platform == "darwin" and shutil.which("afplay") is not None
