@@ -30,6 +30,9 @@ HEART_XML = HEART_DIR / "heart-nih3d.xml"
 # Another heart model (STL/OBJ: x anterior, y left, z superior; mm or m), placed where the NIH heart
 # is; set by --heart or the "Load heart (STL)" button. Its whole surface counts as heart muscle.
 HEART_FILE = None
+# The scene recordings are made in: "or-room" since the skin became the patient's curved chest
+# skin (older skin recordings were made on a flat pad and are not replayed by the autopilot).
+SCENE = "or-room"
 # The operating room (room, lights, table, draped patient, skin window, opened chest,
 # equipment, cables, extra instruments): see environment/README.txt.
 ENV_XML = Path(__file__).resolve().parent / "environment" / "environment_simulator.xml"

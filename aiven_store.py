@@ -179,10 +179,12 @@ class TrainingStore:
                 out.append(s)
         return sorted(out, key=lambda s: s["started_at"], reverse=True)
 
-    def best(self, site):
-        """(summary, recording) of the best complete attempt at `site`, or None."""
+    def best(self, site, scene=None):
+        """(summary, recording) of the best complete attempt at `site`, or None. With `scene`,
+        only attempts recorded in that scene (older ones are kept but not replayed)."""
         runs = [s for s in self.summaries(site)
-                if s["complete"] and (self.runs / f"{s['id']}.npz").is_file()]
+                if s["complete"] and (self.runs / f"{s['id']}.npz").is_file()
+                and (scene is None or s.get("scene") == scene)]
         if not runs:
             return None
         top = max(runs, key=lambda s: (s["score"], -s["duration_s"]))

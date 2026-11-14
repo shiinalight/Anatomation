@@ -63,6 +63,7 @@ SWITCH_HAND = ord("Z")    # keyboard control moves to the other hand (it also fo
 RESET_HANDS = 0x10000     # from the panel's Reset hands button (a code no keyboard key sends)
 BOTH_HANDS = ord("Y")     # toggles moving both hands together (also the Both hands button)
 SELECT_HAND = {"left": 0x10002, "right": 0x10003}   # double-click on a hand in the viewer
+RESET_TOOLS = 0x10004     # the room's Reset instruments button: every tool back in its tray
 PULL_HEIGHT = .009        # forceps lift that pulls the suture through after the needle exits
 THROWS = ("double wrap", "single wrap, reversed", "single wrap, squares the knot")
 # GLFW key code -> (axis, metres per tap). Holding a key moves at MOVE_SPEED * step / s.
@@ -758,6 +759,11 @@ class CuttingStation:
             return
         if code == RESET_HANDS:
             self.reset_hands()
+            return
+        if code == RESET_TOOLS:
+            self.park_all()
+            self.rest = [(position.copy(), TRAY_DIRECTION.copy()) for position in TOOL_HOME]
+            self.inform("Instruments back in their trays")
             return
         if code in SELECT_HAND.values():
             self.active = next(side for side, c in SELECT_HAND.items() if c == code)
@@ -1467,6 +1473,10 @@ class Session:
     def attempt_id(self):
         return self.recorder.id if self.recorder is not None else None
 
+    def replay_scene(self):
+        """Skin attempts replay only if recorded on the room's chest skin (the heart did not move)."""
+        return or_scene.SCENE if self.site.name == "skin" else None
+
     def complete(self):
         st = self.station
         if st.procedure is not None:
@@ -1479,13 +1489,14 @@ class Session:
         """Score and save the current attempt (if anything happened)."""
         if self.recorder is None:
             return None
-        attempt = self.recorder.finish(now, self.complete(), {"stitches": len(self.station.stitches)})
+        attempt = self.recorder.finish(now, self.complete(), {"stitches": len(self.station.stitches),
+                                                              "scene": or_scene.SCENE})
         self.recorder = None
         if attempt is None:
             return None
         self.store.save(attempt)
         self.last = attempt.summary
-        best = self.store.best(self.procedure.key)
+        best = self.store.best(self.procedure.key, self.replay_scene())
         ideal = " - new best, the autopilot will replay it" if (
             best and best[0]["id"] == attempt.summary["id"]) else ""
         self.notice = (f"Attempt saved: {attempt.summary['score']:.0f}/100 "
@@ -1503,7 +1514,7 @@ class Session:
 
     # --- autopilot ------------------------------------------------------------------------
     def start_autopilot(self, now):
-        best = self.store.best(self.procedure.key)
+        best = self.store.best(self.procedure.key, self.replay_scene())
         if best is None:
             self.notice = (f"{self.procedure.label} has no ideal run: choose a guided procedure "
                            "for the autopilot" if self.procedure.task in ("free", "stitch") else
@@ -1700,6 +1711,8 @@ def display(gloves, preview, procedure):
     held_keys = HeldKeys()
     sounds = Sounds()
     controls = EnvironmentControls(model, data)   # room: panel buttons, camera, heart, screens
+    # Reset instruments goes through the keys like Reset hands, so recordings replay exactly.
+    controls.reset_tools = lambda station: [RESET_TOOLS]
     store, telemetry = TrainingStore(), Telemetry()
     from coach import Coach
     coach = Coach(store)
@@ -1889,7 +1902,7 @@ def display(gloves, preview, procedure):
                                   f"{station.action_prompt(short=True)}")
                     else:
                         action = station.action_prompt(short=True)
-                    best = store.best(session.procedure.key)
+                    best = store.best(session.procedure.key, session.replay_scene())
                     scores = (f"last {session.last['score']:.0f}" if session.last else "no attempt yet") + (
                         f", best {best[0]['score']:.0f}" if best else "")
                     coach_line = f"{scores}  |  {session.recent_notice() or coach.status()}"

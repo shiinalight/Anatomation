@@ -57,6 +57,7 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 | Procedure | Procedures window (dropdown), or P for the next one. The checklist at the top left shows every step: [x] done, [>] in progress, [ ] still to come, and the last actions completed |
 | Both hands | Y, or the Both hands button (Equality section): the arrows and Q/E move both hands together (both cuffs green); press again to go back to one hand |
 | Reset hands | Reset hands button (Equality section): both hands go back to their start in front of you, keeping their tools; the camera stays where it is |
+| Room | Reset view (camera back to the surgeon's view; the hands stay), Reset instruments (every tool back in its tray, the repair stays), Lift heart out (or double-click the heart; Ctrl + right-drag moves it, Ctrl + left-drag turns it), Load heart (STL) or `--heart file.stl` (another heart model). All in the Equality section |
 | Key guide | Hidden at start; K or the Key guide button in the Equality section shows it at the bottom right, next to the status box |
 | Start over | R, or the Clear repair button in the same Equality section: the attempt so far is scored and saved, then the site starts fresh with the tools back in the trays |
 | Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
@@ -152,8 +153,14 @@ this, recording, scoring and the autopilot still work locally.
 
 - `surgical_suturing_guided.py`: glove tracking (both gloves), instruments and the
   two-handed cutting and suturing logic.
-- `or_scene.py`: the operating room (layout, heart model import, heart-surface queries,
-  generated textures, lighting, patient monitor, sounds).
+- `or_scene.py`: the scene (heart model import, skin and heart surface queries, trays,
+  patient monitor, sounds); it includes the operating room from `environment/`.
+- `environment/`: saimn80's cardiac operating room (`environment_simulator.xml` and its
+  assets: the draped patient with curved chest skin, the opened chest, heart-lung and
+  anaesthesia machines, lights, animated screens) and `or_controls.py` (Reset view, Reset
+  instruments, Lift heart out, Load heart, the camera kept inside the room). See
+  `environment/README.txt`. Recordings made since the room carry `"scene": "or-room"`;
+  older skin recordings (flat pad) are kept but not replayed by the autopilot.
 - `bypass.py`: the guided coronary bypass procedure (targets, steps, graft).
 - `motion_log.py`: recording, task scoring, autopilot replay and the robot trajectory export.
 - `aiven_store.py`: local-first storage synced to Aiven PostgreSQL, and Kafka telemetry;
