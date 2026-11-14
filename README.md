@@ -1,19 +1,19 @@
 <div align="center">
 
-<img src="stitch-heart-mascot.png" alt="TelePharm stitched-heart mascot" width="115">
+<img src="docs/readme/anatomation-cover.jpg" alt="Anatomation poster with a robotic arm, a heart, and bold retro computer windows" width="100%">
 
-# TelePharm
+# Anatomation
 
-### Every stitch leaves a trace.
+**The TelePharm virtual suturing workstation**
 
 Practice on a virtual heart, then see where your instruments went and how the attempt unfolded.
 
 **[Take a look](#take-a-look)** · **[Watch a complete run](#first-practice-run)** · **[Run locally](#quick-start)** · **[Explore SurgiSense](#browser-workbench)**
 
-![Python 3.11](https://img.shields.io/badge/Python-3.11-142126?style=flat-square&logo=python&logoColor=93D8CC)
-![MuJoCo simulation](https://img.shields.io/badge/MuJoCo-Simulation-142126?style=flat-square&labelColor=245C5A)
-![Rokoko Smartglove](https://img.shields.io/badge/Rokoko-Smartglove-142126?style=flat-square&labelColor=245C5A)
-![Gemma and Gemini coaching](https://img.shields.io/badge/Gemma_%2B_Gemini-Optional_coaching-142126?style=flat-square&labelColor=245C5A)
+![Python 3.11](https://img.shields.io/badge/Python-3.11-FF6300?style=flat-square&logo=python&logoColor=FFFFFF)
+![MuJoCo simulation](https://img.shields.io/badge/MuJoCo-Simulation-2847F4?style=flat-square&labelColor=080808)
+![Rokoko Smartglove](https://img.shields.io/badge/Rokoko-Smartglove-526D00?style=flat-square&labelColor=080808)
+![Gemma and Gemini coaching](https://img.shields.io/badge/Gemma_%2B_Gemini-Optional_coaching-FF6300?style=flat-square&labelColor=080808)
 
 </div>
 
@@ -25,40 +25,40 @@ Practice on a virtual heart, then see where your instruments went and how the at
 
 Follow the guide through an incision, five stitches, and a final trim. The procedure checklist tracks each stage while the live panel shows the tool, next action, and tip measurements.
 
-[![TelePharm desktop workstation with a blue virtual glove and needle holder over a heart model, a procedure checklist on the left, and live feedback on the right.](docs/readme/telepharm-workstation.webp)](docs/readme/telepharm-workstation.webp)
+[![TelePharm desktop workstation with a blue virtual glove and needle holder over a heart model, a procedure checklist on the left, and live feedback on the right.](docs/readme/anatomation-heart-lab.webp)](docs/readme/telepharm-workstation.webp)
 
 | The operating room | The practice-pad demo |
 | :---: | :---: |
-| [![Wide MuJoCo operating-room render with table, instruments, overhead lights, and monitor.](operating_room_preview.png)](operating_room_preview.png) | [![Virtual operating table with gloved hand and sutures on a practice pad.](surgery_stitches_preview.png)](surgery_stitches_preview.png) |
+| [![Wide MuJoCo operating-room render with table, instruments, overhead lights, and monitor.](docs/readme/anatomation-operating-room.webp)](operating_room_preview.png) | [![Virtual operating table with gloved hand and sutures on a practice pad.](docs/readme/anatomation-practice-pad.webp)](surgery_stitches_preview.png) |
 | The scene behind the desktop workstation. | The scripted instrument and stitching sequence. |
 
 ### After the last stitch
 
 **Session Review** puts the attempt’s timeline, virtual tip trajectory, and stitch count together. This keyboard run finished with all five stitches tied and zero rejected actions.
 
-[![Session Review after a complete keyboard run with a virtual tip trajectory and timestamped procedure events.](docs/readme/telepharm-session-review.webp)](docs/readme/telepharm-session-review.webp)
+[![Session Review after a complete keyboard run with a virtual tip trajectory and timestamped procedure events.](docs/readme/anatomation-session-review.webp)](docs/readme/telepharm-session-review.webp)
 
 ### A closer look in SurgiSense
 
 In the browser workbench, click a stroke or stitch on the sample pad to inspect it. The workbench also lets you toggle layers, replay the sample, and export measurements.
 
-[![SurgiSense sample session showing the interactive pad map, selected stroke, deviation chart, and recorded actions.](docs/readme/surgisense-workbench.webp)](docs/readme/surgisense-workbench.webp)
+[![SurgiSense sample session showing the interactive pad map, selected stroke, deviation chart, and recorded actions.](docs/readme/anatomation-surgisense-analysis.webp)](docs/readme/surgisense-workbench.webp)
 
 <details>
 <summary><strong>More from the project gallery</strong></summary>
 
 | Heart mesh | Stitch-heart mascot |
 | :---: | :---: |
-| [![Isolated preview of the heart mesh used by the guided scene.](human-heart-preview.png)](human-heart-preview.png) | [![TelePharm mascot with a stitched heart and a smiling face.](stitch-heart-mascot.png)](stitch-heart-mascot.png) |
+| [![Isolated preview of the heart mesh used by the guided scene.](docs/readme/anatomation-heart-mesh.webp)](human-heart-preview.png) | [![TelePharm mascot with a stitched heart and a smiling face.](docs/readme/anatomation-stitch-heart.webp)](stitch-heart-mascot.png) |
 | [Heart model file](human-heart.glb) | [Mascot model file](stitch-heart-mascot.stl) |
 
 **SurgiSense workstation prototype**
 
-[![Alternate browser workstation design with a practice-pad reference, procedure steps, and coaching panel.](surgisense-design/dashboard-preview.png)](surgisense-design/dashboard-preview.png)
+[![Alternate browser workstation design with a practice-pad reference, procedure steps, and coaching panel.](docs/readme/anatomation-workstation-prototype.webp)](surgisense-design/dashboard-preview.png)
 
 **SurgiSense analysis prototype**
 
-[![Alternate browser analysis design with a top-down practice pad, session findings, and measurements.](surgisense-design/analysis-preview.png)](surgisense-design/analysis-preview.png)
+[![Alternate browser analysis design with a top-down practice pad, session findings, and measurements.](docs/readme/anatomation-pad-map-prototype.webp)](surgisense-design/analysis-preview.png)
 
 </details>
 
@@ -112,7 +112,7 @@ Run `.\.venv\Scripts\python.exe hand_lab.py --help` for the available flags. The
 <details>
 <summary><strong>Watch a complete keyboard attempt</strong></summary>
 
-![Animated capture of the guided heart workstation advancing from the incision guide through five tied stitches and the final trimmed suture.](docs/readme/telepharm-run.gif)
+![Animated capture of the guided heart workstation advancing from the incision guide through five tied stitches and the final trimmed suture.](docs/readme/anatomation-keyboard-replay.gif)
 
 </details>
 
@@ -220,8 +220,8 @@ flowchart LR
     Exercise --> Review[Local assessment and session JSON]
     Viewer -->|On request| Coach[Hosted Gemma and Gemini]
     Sample[Built-in example coordinates] --> Web[SurgiSense browser workbench]
-    classDef simulator fill:#BCE5DF,stroke:#245C5A,color:#142126
-    classDef review fill:#D8E1FA,stroke:#485A83,color:#142126
+    classDef simulator fill:#FFE900,stroke:#080808,stroke-width:3px,color:#080808
+    classDef review fill:#CAFF00,stroke:#080808,stroke-width:3px,color:#080808
     class Input,Viewer,Exercise simulator
     class Review,Coach,Sample,Web review
 ```
@@ -263,4 +263,4 @@ flowchart LR
 
 </details>
 
-[Back to top](#telepharm)
+[Back to top](#anatomation)
