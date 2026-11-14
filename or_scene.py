@@ -114,23 +114,6 @@ TABLE_MIN = np.array([-.54, -.28])  # where a dropped tool may come to rest
 TABLE_MAX = np.array([.54, .44])
 TABLE_TOP = .812                    # drape over the OR table mattress
 
-# Procedure selector: a touch panel on an arm, facing the surgeon, with one button per
-# site. Double-clicking a button in the viewer selects its body, which switches site.
-CONSOLE_CENTER = np.array([.19, -.115, .995])
-_facing = np.array([.28, -.62, 1.43]) - CONSOLE_CENTER
-CONSOLE_NORMAL = _facing / np.linalg.norm(_facing)
-CONSOLE_RIGHT = np.cross([0, 0, 1], CONSOLE_NORMAL)
-CONSOLE_RIGHT /= np.linalg.norm(CONSOLE_RIGHT)
-CONSOLE_UP = np.cross(CONSOLE_NORMAL, CONSOLE_RIGHT)
-CONSOLE_HALF = np.array([.085, .045])
-BUTTON_HALF = np.array([.037, .028])
-SITE_BUTTONS = {"skin": -.042, "heart": .042}     # site -> offset along CONSOLE_RIGHT
-
-
-def button_body(name):
-    return f"site_button_{name}"
-
-
 MONITOR_CENTER = np.array([.10, 1.12, 1.00])
 MONITOR_HALF = np.array([.20, .125])   # screen half width / height
 _toward = np.array([.28, -.62, 1.25]) - MONITOR_CENTER
@@ -461,7 +444,8 @@ def _scene_xml():
     # Both operating sites are in the model; the viewer shows one at a time by group.
     _skin_window(lambda line: add(line.replace("<geom ", '<geom group="1" ', 1)))
     _open_chest(lambda line: add(line.replace("<geom ", '<geom group="3" ', 1)))
-    _site_console(add)
+    add('<body name="site_switch_a"/>')    # anchors for the site switch (see SITE_SWITCH)
+    add('<body name="site_switch_b"/>')
     add('<geom type="ellipsoid" pos=".62 .06 .815" size=".56 .24 .075" material="drape"/>')
     add('<geom type="ellipsoid" pos="1.10 .00 .845" size=".04 .05 .06" material="drape"/>')
     add('<geom type="ellipsoid" pos="1.10 .12 .845" size=".04 .05 .06" material="drape"/>')
@@ -612,10 +596,6 @@ def _scene_xml():
     <material name="sternum" rgba=".80 .66 .45 1" specular=".3" shininess=".4"/>
     <material name="sponge" rgba=".93 .92 .88 1" specular=".05"/>
     <material name="target" rgba=".95 .93 .85 1" specular=".2"/>
-    <material name="button_skin" rgba=".78 .52 .38 1" specular=".5" shininess=".7"/>
-    <material name="button_heart" rgba=".72 .12 .14 1" specular=".5" shininess=".7"/>
-    <material name="button_label" rgba="1 1 1 1" emission=".8"/>
-    <material name="button_active" rgba=".3 1 .45 1" emission="1"/>
     <material name="wound" rgba=".36 .03 .04 1" specular=".95" shininess=".95"/>
     <material name="blood" rgba=".46 .02 .03 1" specular="1" shininess="1"/>
     <material name="thread" rgba=".36 .20 .62 1" specular=".5" shininess=".6"/>
@@ -629,6 +609,10 @@ def _scene_xml():
     <material name="grid" rgba=".08 .16 .14 1" emission=".6"/>
   </asset>
   <default><geom contype="0" conaffinity="0"/></default>
+  <equality>
+    <weld name="Skin" body1="site_switch_a" body2="site_switch_b"/>
+    <weld name="Heart" body1="site_switch_a" body2="site_switch_b" active="false"/>
+  </equality>
   <worldbody>
     {lights}
     {chr(10).join("    " + line for line in g)}
@@ -686,28 +670,38 @@ def _open_chest(add):
     add('<geom type="box" pos=".105 -.185 .975" size=".004 .03 .004" material="satin"/>')
 
 
-def _site_console(add):
-    c, n, r, u = CONSOLE_CENTER, CONSOLE_NORMAL, CONSOLE_RIGHT, CONSOLE_UP
-    axes = f'xyaxes="{_fmt(r)} {_fmt(u)}"'
-    add(f'<geom type="box" pos="{_fmt(c - n*.006)}" {axes} '
-        f'size="{CONSOLE_HALF[0]} {CONSOLE_HALF[1]} .006" material="plastic_dark"/>')
-    add(f'<geom type="box" pos="{_fmt(c - n*.0005)}" {axes} '
-        f'size="{CONSOLE_HALF[0] - .004} {CONSOLE_HALF[1] - .004} .0005" material="screen"/>')
-    mount = c - n*.012 - u*.02
-    add(f'<geom type="capsule" fromto="{_fmt(mount)} {_fmt(mount - u*.12 + n*.03)}" size=".007" '
-        f'material="satin"/>')
-    add(f'<geom type="capsule" fromto="{_fmt(mount - u*.12 + n*.03)} .19 -.215 .81" size=".007" '
-        f'material="satin"/>')
-    for name, offset in SITE_BUTTONS.items():
-        centre = c + r*offset - u*.004 + n*.003
-        add(f'<body name="{button_body(name)}" pos="{_fmt(centre)}" {axes}>'
-            f'<geom type="box" size="{BUTTON_HALF[0]} {BUTTON_HALF[1]} .003" '
-            f'material="button_{name}"/></body>')
-
-
 def build_model():
     """The operating room with both sites; `show_site` picks which one is visible."""
     return mj.MjModel.from_xml_string(_scene_xml(), {**_textures(), **_heart_xml()[2]})
+
+
+SITE_SWITCH = {"skin": "Skin", "heart": "Heart"}   # site -> button (equality) name
+
+
+class SiteSwitch:
+    """The Skin / Heart buttons in the viewer's Equality panel, kept mutually exclusive."""
+
+    def __init__(self, model, data, site):
+        self.data = data
+        self.ids = {name: model.equality(label).id for name, label in SITE_SWITCH.items()}
+        self.select(site)
+
+    def select(self, site):
+        for name, i in self.ids.items():
+            self.data.eq_active[i] = name == site
+        self.state = {name: bool(self.data.eq_active[i]) for name, i in self.ids.items()}
+        self.current = site
+
+    def poll(self):
+        """The site the user just switched on in the panel, or None."""
+        state = {name: bool(self.data.eq_active[i]) for name, i in self.ids.items()}
+        turned_on = [name for name in state if state[name] and not self.state[name]]
+        if state == self.state:
+            return None
+        # Radio buttons: turning one on turns the other off; turning the active one off
+        # is undone, since a site must always be shown.
+        self.select(turned_on[0] if turned_on else self.current)
+        return turned_on[0] if turned_on else None
 
 
 def show_site(model, option, site):
@@ -802,40 +796,6 @@ def _digits(scene, text, u, v, height, material):
             start = _screen(x0 + a*width, v + b*height)
             end = _screen(x0 + c*width, v + d*height)
             add_capsule(scene, start, end, .0016, material)
-
-
-_LETTERS = {
-    "S": [((1, 1), (0, 1)), ((0, 1), (0, .5)), ((0, .5), (1, .5)), ((1, .5), (1, 0)), ((1, 0), (0, 0))],
-    "K": [((0, 0), (0, 1)), ((1, 1), (0, .45)), ((.3, .62), (1, 0))],
-    "I": [((.5, 0), (.5, 1))],
-    "N": [((0, 0), (0, 1)), ((0, 1), (1, 0)), ((1, 0), (1, 1))],
-    "H": [((0, 0), (0, 1)), ((1, 0), (1, 1)), ((0, .5), (1, .5))],
-    "E": [((1, 1), (0, 1)), ((0, 1), (0, 0)), ((0, 0), (1, 0)), ((0, .5), (.8, .5))],
-    "A": [((0, 0), (.5, 1)), ((.5, 1), (1, 0)), ((.22, .42), (.78, .42))],
-    "R": [((0, 0), (0, 1)), ((0, 1), (1, 1)), ((1, 1), (1, .5)), ((1, .5), (0, .5)), ((.35, .5), (1, 0))],
-    "T": [((0, 1), (1, 1)), ((.5, 1), (.5, 0))],
-}
-
-
-def draw_site_console(scene, active):
-    """Button labels and a glowing frame around the active site's button."""
-    n, r, u = CONSOLE_NORMAL, CONSOLE_RIGHT, CONSOLE_UP
-    height, width, gap = .016, .0095, .0045
-    for name, offset in SITE_BUTTONS.items():
-        centre = CONSOLE_CENTER + r*offset - u*.004 + n*.0065
-        text = name.upper()
-        x0 = -(len(text)*width + (len(text) - 1)*gap)/2
-        for i, letter in enumerate(text):
-            left = x0 + i*(width + gap)
-            for (a, b), (c, d) in _LETTERS[letter]:
-                start = centre + r*(left + a*width) + u*((b - .5)*height)
-                end = centre + r*(left + c*width) + u*((d - .5)*height)
-                add_capsule(scene, start, end, .0011, "button_label")
-        if name == active:
-            hx, hy = BUTTON_HALF + .003
-            corners = [centre + r*sx*hx + u*sy*hy for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1), (-1, -1))]
-            for a, b in zip(corners, corners[1:]):
-                add_capsule(scene, a, b, .0016, "button_active")
 
 
 def _ecg(phase):

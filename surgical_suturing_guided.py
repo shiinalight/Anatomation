@@ -14,8 +14,8 @@ import mujoco.viewer
 import numpy as np
 
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
-                      add_capsule, add_geom, build_model, button_body, draw_monitor,
-                      draw_site_console, make_tissue, show_site, surface_strip)
+                      add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
+                      surface_strip, SiteSwitch)
 
 SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
 ANCHOR = np.array([0, -0.10, 1.015])
@@ -742,12 +742,10 @@ SWITCH_SITE = ord("P")
 
 
 def draw_user(scene, points, station, now):
-    """Everything that moves: glove, instruments, wounds, sutures, the patient monitor
-    and the procedure selector."""
+    """Everything that moves: glove, instruments, wounds, sutures and the patient monitor."""
     draw_hand(scene, points)
     station.draw(scene, now)
     draw_monitor(scene, now)
-    draw_site_console(scene, station.site.name)
 
 
 def display(frames, preview, site):
@@ -755,7 +753,7 @@ def display(frames, preview, site):
     Look.model = model
     data = mj.MjData(model)
     mj.mj_forward(model, data)
-    buttons = {model.body(button_body(name)).id: name for name in SITES}
+    switch = SiteSwitch(model, data, site.name)
     heading = Heading()
     last_status = None
     keys = SimpleQueue()
@@ -770,7 +768,7 @@ def display(frames, preview, site):
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
           "M mutes or unmutes the OR sounds.\n"
-          "Switch site: double-click SKIN or HEART on the console at the front right, or press P.",
+          "Switch site: Skin / Heart buttons in the Equality panel on the right, or press P.",
           flush=True)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
@@ -793,16 +791,13 @@ def display(frames, preview, site):
                 pressed.append(code)
             held = list(held_keys.moves(now, dt))
 
-            # Site switching: double-click a console button (selects its body) or press P.
-            choice = None
+            # Site switching: the Skin / Heart buttons in the viewer's Equality panel, or P.
             with viewer.lock():
-                selected = viewer.perturb.select
-                if selected in buttons:
-                    choice = buttons[selected]
-                    viewer.perturb.select = 0
-            if SWITCH_SITE in pressed:
-                pressed = [code for code in pressed if code != SWITCH_SITE]
-                choice = "heart" if station.site.name == "skin" else "skin"
+                choice = switch.poll()
+                if SWITCH_SITE in pressed:
+                    choice = "heart" if station.site.name == "skin" else "skin"
+                    switch.select(choice)
+            pressed = [code for code in pressed if code != SWITCH_SITE]
             if choice is not None and choice != station.site.name:
                 site = SITES[choice]
                 station.park()
@@ -857,8 +852,9 @@ def display(frames, preview, site):
                 tool_status = (TOOL_NAMES[station.selected] + " selected"
                                if station.held is None else TOOL_NAMES[station.held] + " held")
                 overlay((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
-                         "SURGICAL TRAINING\nInstrument\nStitches / depth\nAction",
-                         f"{status}\n{tool_status}\n{len(station.stitches)} / "
+                         "SURGICAL TRAINING\nSite\nInstrument\nStitches / depth\nAction",
+                         f"{status}\n{station.site.name.capitalize()}  (switch: Equality panel "
+                         f"on the right, or P)\n{tool_status}\n{len(station.stitches)} / "
                          f"{station.depth*1000:.1f} mm\n{station.action_prompt()}"))
                 next_overlay = now + .10
             viewer.sync()
