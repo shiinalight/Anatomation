@@ -1111,7 +1111,7 @@ class CuttingStation:
         if self.procedure is not None and self.procedure.done:
             return None, self.procedure.prompt_done()
         if self.task == "free":
-            return None, "Free practice: any order. Z switches hands; the two-hand rules still apply"
+            return None, "Free practice: cut and stitch anywhere, in any order (Z switches hands)"
 
         if self.cutting_step():
             blade = self.holder(0) or right
@@ -1263,7 +1263,7 @@ class CuttingStation:
                     self.message = "Blade on a vessel! Lift (Q), move away"
             hand.previous_tip = None
             return
-        if not self.steadied(hand):
+        if self.task != "free" and not self.steadied(hand):   # free practice cuts freely
             self.message = f"Steady the tissue first: {OTHER[hand.side]} hand N then F"
             hand.previous_tip = None
             return
