@@ -2,8 +2,11 @@
 
 import argparse
 from collections import deque
+from contextlib import ExitStack
 from queue import SimpleQueue
 from pathlib import Path
+import os
+import socket
 import subprocess
 import sys
 import threading
@@ -235,7 +238,6 @@ def world_pose(points, heading, now):
 
 
 def draw_hand(scene, points):
-    scene.ngeom = 0
     if points is None:
         return
 
@@ -390,6 +392,7 @@ class CuttingStation:
         self.depth = 0.0
         self.message = "2 (select needle holder) / G (pick up selected tool)"
         self.events = []                 # sound cues for the display loop
+        self.activity = []
         self.blood = deque(maxlen=220)   # (position, born, final radius)
         self.clock = 0.0
 
@@ -404,6 +407,7 @@ class CuttingStation:
         x, y = xy
         self.rest[self.held] = (np.array([x, y, self.tissue.rest_height(x, y) + .004]), flat)
         self.events.append("setdown")
+        self.activity.append(("set down", TOOL_NAMES[self.held]))
         self.held = self.tool_pose = self.previous_tip = self.tissue_grip = None
         self.pinch_finger = None
         self.guide_tip = None
@@ -464,6 +468,8 @@ class CuttingStation:
             self.tool_pose = self.pose_for_tool(pose)
 
     def action_prompt(self):
+        if self.held == 1 and len(self.stitches) >= 48:
+            return "R (clear the completed practice area)"
         if self.held != 1:
             return self.message
         if self.exit is not None:
@@ -472,9 +478,8 @@ class CuttingStation:
             return ("N (align over opposite edge)" if self.entry is not None
                     else "N (align needle for next stitch)")
         if self.guide_lower_steps:
-            count = self.guide_lower_steps
-            key = f"{count}xE" if count > 1 else "E"
-            return f"{key} (lower needle to the {self.site.noun})"
+            taps = "twice" if self.guide_lower_steps == 2 else "once more"
+            return f"Press E {taps} to lower the needle to the {self.site.noun}."
         return "F (puncture opposite edge)" if self.entry is not None else "F (puncture first edge)"
 
     def active_tip(self):
@@ -491,6 +496,7 @@ class CuttingStation:
         self.offset[:] = self.rest[index][0] - self.grip(pose, finger or "index")
         self.tool_pose = self.pose_for_tool(pose)
         self.events.append("pickup")
+        self.activity.append(("picked up", TOOL_NAMES[index]))
         self.message = {
             0: "Arrows (move) / E (lower blade) / G (set down)",
             2: "N (align forceps) / F (grip edge)",
@@ -556,6 +562,7 @@ class CuttingStation:
             surface = self.tissue.point(self.site.point(along, side))
             self.guide_tip = surface + np.array([0., 0., .004])
             self.guide_lower_steps = 2
+            self.activity.append(("aligned", "Needle guide engaged"))
         elif code == ord("C"):
             if self.held is not None:
                 self.tool_pose = self.pose_for_tool(pose)
@@ -575,6 +582,7 @@ class CuttingStation:
             if self.tissue_grip is not None:
                 self.tissue_grip = None
                 self.message = "F (grip practice edge)"
+                self.activity.append(("released", "Practice edge"))
                 return
             tip = self.active_tip()
             surface = self.tissue.height(*tip[:2])
@@ -583,52 +591,65 @@ class CuttingStation:
                     and abs(side) <= self.site.grip_side and abs(along) <= self.site.grip_along):
                 self.tissue_grip = np.array([*tip[:2], surface])
                 self.message = "Q (lift edge) / F (release)"
+                self.activity.append(("gripped", "Practice edge"))
             else:
                 self.message = "N (align forceps with the wound edge)"
+                self.activity.append(("rejected", "Forceps outside the practice edge"))
             return
 
         if action == ord("X"):
             if self.held != 3 or not self.stitches:
                 self.message = "4 then G (pick up scissors after tying)"
+                self.activity.append(("rejected", "Trimming requires scissors and a tied stitch"))
                 return
             tip = self.active_tip()
             entry, exit, trimmed = self.stitches[-1]
             if np.linalg.norm(tip - exit) > .035:
                 self.message = "N (align scissors) / X (trim thread)"
+                self.activity.append(("rejected", "Scissors too far from the stitch"))
                 return
             self.stitches[-1] = (entry, exit, True)
             self.events.append("trim")
+            self.activity.append(("trimmed", f"Stitch {len(self.stitches)}"))
             self.message = "G (set down scissors; thread trimmed)"
             return
 
         if self.held != 1:
             self.message = "G (set down tool) / 2 then G (pick up needle holder)"
+            self.activity.append(("rejected", "Needle action requires the needle holder"))
             return
         if action == ord("T"):
             if self.exit is None:
                 self.message = "Pass the needle through both sides first"
+                self.activity.append(("rejected", "Tie requires both needle marks"))
                 return
             if len(self.stitches) >= 48:
                 self.message = "Repair full - press R to reset"
+                self.activity.append(("rejected", "Practice area is full"))
                 return
             self.stitches.append((self.entry, self.exit, False))
             self.events.append("tie")
+            self.activity.append(("tied", f"Stitch {len(self.stitches)}"))
             self.entry = self.exit = None
             self.guide_tip = None
             return
 
         if self.exit is not None:
             self.message = "Press T to tighten and tie"
+            self.activity.append(("rejected", "Both needle marks already placed"))
             return
         if self.guide_tip is not None and self.guide_lower_steps:
+            self.activity.append(("rejected", "Needle was still above the practice surface"))
             return
         tip = self.active_tip()
         if self.tissue.on_vessel(*tip[:2]):
             self.message = "Keep the needle off the coronary vessels"
+            self.activity.append(("rejected", "Virtual needle tip overlapped a vessel"))
             return
         surface = self.tissue.height(*tip[:2])
         if surface is None or not surface - .012 <= tip[2] <= surface + .001:
             self.message = f"Lower the needle tip to the {self.site.noun}"
+            self.activity.append(("rejected", "Virtual needle tip did not reach the practice surface"))
             return
         point = self.tissue.point(tip[:2], .0015)
         along, side = self.site.coords(point)
@@ -636,21 +657,25 @@ class CuttingStation:
         if not (site.bite_min <= abs(side) <= site.bite_max and abs(along) <= site.along_limit):
             self.message = (f"Place the needle {site.bite_min*1000:.0f}-{site.bite_max*1000:.0f} mm "
                             "beside the wound")
+            self.activity.append(("rejected", "Virtual needle tip was outside the seam guide"))
             return
         if self.entry is None:
             self.entry = point
             self.guide_tip = None
             self.bleed(point, .0011)
             self.events.append("puncture")
+            self.activity.append(("puncture", "First virtual edge marked"))
             return
         entry_along, entry_side = self.site.coords(self.entry)
         if side*entry_side < 0 and abs(along - entry_along) <= site.exit_tolerance:
             self.exit = point
             self.bleed(point, .0011)
             self.events.append("puncture")
+            self.activity.append(("puncture", "Opposite virtual edge marked"))
             self.message = "Press T to tighten and tie"
         else:
             self.message = "Place the exit straight across from the entry"
+            self.activity.append(("rejected", "Exit was not across from the entry"))
 
     def cut(self, tip):
         self.depth = 0.0
@@ -744,8 +769,13 @@ def draw_user(scene, points, station, now):
     draw_monitor(scene, now)
 
 
-def display(frames, preview, site):
-    model = build_model(site)
+def display(frames, preview, site, api_key=None, history=None):
+    control_names = ()
+    if api_key:
+        from native_coach import NativeCoach, controls
+
+        control_names = controls(history)
+    model = build_model(site, control_names)
     Look.model = model
     data = mj.MjData(model)
     mj.mj_forward(model, data)
@@ -756,16 +786,25 @@ def display(frames, preview, site):
     held_keys = HeldKeys()
     sounds = Sounds()
     last_frame = time.monotonic()
+    mode = "keyboard" if preview else "glove"
+    if history:
+        from training_history import TrainingAttempt
+
+        attempt = TrainingAttempt(last_frame, mode, site.name)
     print("1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
           "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
           "N aligns tools, F punctures or grips tissue, T ties, X trims. R clears the repair.\n"
-          "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan,\n"
-          "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
+          "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan, 0 resets the view.\n"
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
           "M mutes or unmutes the OR sounds.",
           flush=True)
 
-    with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
+    with ExitStack() as resources:
+        coach = NativeCoach(model, api_key, history, mode, resources) if api_key else None
+        exercise = 0
+        viewer = resources.enter_context(mujoco.viewer.launch_passive(model, data, key_callback=keys.put))
+        if coach:
+            print("Open Equality in the right sidebar and click AI Assistant for the coach window.", flush=True)
         with viewer.lock():
             bench_view(model, data, viewer.cam, site.zoom)
         overlay = getattr(viewer, "set_texts", None)
@@ -812,9 +851,23 @@ def display(frames, preview, site):
                 status = ("Rokoko live" if heading.locked
                           else "Rest your hand flat, fingers toward the screen")
 
-            points = station.update(points, pressed, held)
             with viewer.lock():
-                draw_user(viewer.user_scn, points, station, now)
+                clicked = coach.clicks(data) if coach else set()
+            save_requested = ord("J") in pressed or "Save attempt" in clicked
+            if history and (save_requested or ord("R") in pressed):
+                report = attempt.report(now)
+                try:
+                    saved = history.save(report) if report else None
+                except OSError:
+                    coach.history_status = "Could not save locally. Try saving again."
+                else:
+                    if save_requested:
+                        coach.saved(saved)
+                    attempt = TrainingAttempt(now, mode, site.name)
+                    station = CuttingStation(station.tissue)
+                    exercise += 1
+                pressed = [code for code in pressed if code not in (ord("J"), ord("R"))]
+            points = station.update(points, pressed, held)
             for event in station.events:
                 sounds.play(event)
             station.events.clear()
@@ -823,52 +876,155 @@ def display(frames, preview, site):
             if status != last_status:
                 print(status, flush=True)
                 last_status = status
+            tool = TOOL_NAMES[station.held] if station.held is not None else None
+            tool_status = f"{tool} held" if tool else f"{TOOL_NAMES[station.selected]} selected"
+            cue = station.action_prompt()
+            if points is None:
+                cue = "Connect the Rokoko glove or restart in keyboard preview."
+            if history:
+                attempt.observe(now, station, tool, status)
+            station.activity.clear()
+
+            def draw_scene(scene):
+                draw_user(scene, points, station, now)
+
+            if coach:
+                tied = len(station.stitches)
+                trimmed = sum(trimmed for _, _, trimmed in station.stitches)
+                passage = ("both edges marked" if station.exit is not None else
+                           "first edge marked" if station.entry is not None else "no needle entry marked")
+                identity = (exercise, status, tool_status, cue, passage, tied, trimmed,
+                            bool(station.marks), station.tissue_grip is not None)
+                observations = (
+                    f"Virtual exercise: {site.name}. Input: {status}. Instrument: {tool_status}. "
+                    f"Needle state: {passage}. Stitches tied: {tied}. Stitches trimmed: {trimmed}. "
+                    "Controls: 1 selects scalpel, 2 needle holder, 3 forceps, 4 scissors. "
+                    "G picks up or sets down a tool. Arrows move; Q raises and E lowers. "
+                    "N engages alignment, E twice lowers the aligned needle, and F marks each edge. "
+                    "Repeat N, E twice, F at the opposite edge, then press T to tie. "
+                    "With scissors, N aligns to the last knot and X trims. With forceps, F grips or releases. "
+                    "H calibrates the glove, 0 resets the camera, and R clears the practice area."
+                )
+                asked = coach.update(data, clicked, pressed, cue, observations, identity, draw_scene)
+                if history and asked:
+                    attempt.event(now, "coaching requested", f"{asked} · Current exercise action: {cue}")
+            with viewer.lock():
+                viewer.user_scn.ngeom = 0
+                draw_scene(viewer.user_scn)
+                if coach:
+                    coach.set_voice_indicator(data, clicked)
             if overlay is not None and now >= next_overlay:
-                tool_status = (TOOL_NAMES[station.selected] + " selected"
-                               if station.held is None else TOOL_NAMES[station.held] + " held")
-                overlay((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
+                texts = [(int(mj.mjtFontScale.mjFONTSCALE_100), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
                          "SURGICAL TRAINING\nInstrument\nStitches / depth\nAction",
                          f"{status}\n{tool_status}\n{len(station.stitches)} / "
-                         f"{station.depth*1000:.1f} mm\n{station.action_prompt()}"))
+                         f"{station.depth*1000:.1f} mm\n{cue}")]
+                if coach:
+                    texts.append((int(mj.mjtFontScale.mjFONTSCALE_100), int(mj.mjtGridPos.mjGRID_TOPRIGHT),
+                                  "AI COACH", coach.status()))
+                overlay(texts)
                 next_overlay = now + .10
             viewer.sync()
             time.sleep(max(0, 1/60 - (time.monotonic() - now)))
+        if history:
+            report = attempt.report(time.monotonic())
+            if report:
+                history.save(report)
+
+
+def port_open(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=.3):
+            return True
+    except OSError:
+        return False
+
+
+def start_sdk(sdk, resources):
+    windows = sys.platform == "win32"
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    install = sdk.parent.parent
+    for name, port, arguments in (
+        ("rokoko-sdk", 12276, ["--auto-stream-usb"]),
+        ("rkk-hand-solver", 12277, ["--no-driver", "--emit-openxr"]),
+    ):
+        if port_open(port):
+            continue
+        command = install / "bin" / f"{name}.exe" if windows else name
+        child = subprocess.Popen([str(command), *arguments], creationflags=flags)
+        resources.callback(stop_process, child)
+        deadline = time.monotonic() + 10
+        while child.poll() is None and time.monotonic() < deadline:
+            if port_open(port):
+                break
+            time.sleep(.2)
+        else:
+            raise RuntimeError(f"{name} did not open port {port}. Close Rokoko Studio if it holds the glove.")
+
+
+def stop_process(process):
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preview", action="store_true", help="Practice cutting with the keyboard and no glove")
-    parser.add_argument("--site", choices=sorted(SITES), default="skin",
-                        help="What to operate on: the skin pad (default) or the heart")
+    parser.add_argument("--ai", action="store_true", help="Open the Gemma and Gemini coach")
+    parser.add_argument("--mvp", action="store_true", help="Enable AI, session history, and the live USB glove launcher")
+    parser.add_argument("--site", choices=sorted(SITES), default="skin", help="Choose skin or heart practice")
+    parser.add_argument("--sdk-examples", type=Path, help="Rokoko SDK examples/python directory")
     args = parser.parse_args()
     site = SITES[args.site]
-    print(f"Operating site: {site.name}", flush=True)
-    frames = Frames()
-    if args.preview:
-        display(frames, True, site)
-        return
-    stream_script = SDK / "rgmp_stream.py"
-    if not stream_script.is_file():
-        parser.error(f"Missing Rokoko SDK example: {stream_script}")
-    print("Connect only the left glove. Tilt and roll follow your hand directly; to set the\n"
-          "direction, rest your hand flat with fingers toward the screen for half a second.\n"
-          "Press H any time to set the direction again.", flush=True)
-    with subprocess.Popen(
-        [sys.executable, "-u", str(stream_script), "--port", "12277",
-         "--group-name", "joints_openxr", "--measure-type", "TRANSFORM"],
-        stdout=subprocess.PIPE, text=True,
-    ) as process:
-        threading.Thread(target=frames.read, args=(process.stdout,), daemon=True).start()
+    api_key = None
+    if args.ai or args.mvp:
         try:
-            display(frames, False, site)
-        finally:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+            from native_coach import load_api_key
+        except ModuleNotFoundError as error:
+            parser.error(f"The AI coach needs {error.name}. Install requirements-ai.txt and ensure Tk is available.")
+        api_key = load_api_key()
+        if not api_key:
+            parser.error("--ai needs an AI Studio key in .env or the SURGERY_GEMMA_API_KEY/GEMINI_API_KEY environment variable")
+    frames = Frames()
+    with ExitStack() as resources:
+        history = None
+        if args.mvp:
+            try:
+                from training_history import TrainingHistory, configured_uri
+            except ModuleNotFoundError:
+                parser.error("--mvp needs the packages in requirements-mvp.txt")
+            history = TrainingHistory(configured_uri())
+            resources.callback(history.close)
+        if args.preview:
+            display(frames, True, site, api_key, history)
+            return
+        sdk_home = os.environ.get("ROKOKO_SDK_HOME")
+        if not sdk_home and sys.platform == "win32":
+            sdk_home = str(Path(os.environ["LOCALAPPDATA"]) / "Rokoko Device SDK")
+        sdk = args.sdk_examples or (Path(sdk_home) / "examples" / "python" if sdk_home else SDK)
+        stream_script = sdk / "rgmp_stream.py"
+        if not stream_script.is_file():
+            parser.error(f"Missing Rokoko SDK example: {stream_script}")
+        if args.mvp:
+            try:
+                start_sdk(sdk, resources)
+            except (OSError, RuntimeError) as error:
+                parser.error(str(error))
+        print("Connect one glove. Rest your hand flat with fingers toward the screen for half a second.\n"
+              "Press H to recalibrate the direction.", flush=True)
+        process = subprocess.Popen(
+            [sys.executable, "-u", str(stream_script), "--port", "12277",
+             "--group-name", "joints_openxr", "--measure-type", "TRANSFORM"],
+            stdout=subprocess.PIPE, text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        resources.callback(process.stdout.close)
+        resources.callback(stop_process, process)
+        threading.Thread(target=frames.read, args=(process.stdout,), daemon=True).start()
+        display(frames, False, site, api_key, history)
 
 
 if __name__ == "__main__":

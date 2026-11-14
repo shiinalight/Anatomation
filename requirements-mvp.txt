@@ -1,0 +1,2 @@
+-r requirements-ai.txt
+psycopg[binary]

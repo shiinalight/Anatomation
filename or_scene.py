@@ -399,7 +399,7 @@ def _lookat(position, target):
     return d / np.linalg.norm(d)
 
 
-def _scene_xml(site):
+def _scene_xml(site, viewer_controls=()):
     main_light = np.array([-.30, .26, 1.86])
     main_dir = _lookat(main_light, [*INCISION_CENTER, WORK_TOP])
     side_light = np.array([.46, -.18, 1.92])
@@ -609,9 +609,21 @@ def _scene_xml(site):
     {chr(10).join("    " + line for line in g)}
     {heart_body}
     <camera name="bench" pos=".28 -.62 1.43" xyaxes=".925 .380 0 -.202 .492 .847" fovy="45"/>
+    {'<body name="viewer_controls"/>' if viewer_controls else ''}
   </worldbody>
+  {viewer_equalities(viewer_controls)}
 </mujoco>
 """
+
+
+def viewer_equalities(controls):
+    """Expose inactive UI switches on a static body in the native Equality panel."""
+    if not controls:
+        return ""
+    section = ET.Element("equality")
+    for name in controls:
+        ET.SubElement(section, "weld", name=name, body1="viewer_controls", active="false")
+    return ET.tostring(section, encoding="unicode")
 
 
 def _skin_window(add):
@@ -661,9 +673,9 @@ def _open_chest(add):
     add('<geom type="box" pos=".105 -.185 .975" size=".004 .03 .004" material="satin"/>')
 
 
-def build_model(site):
+def build_model(site, viewer_controls=()):
     heart_files = _heart_xml()[2] if site.name == "heart" else {}
-    return mj.MjModel.from_xml_string(_scene_xml(site), {**_textures(), **heart_files})
+    return mj.MjModel.from_xml_string(_scene_xml(site, viewer_controls), {**_textures(), **heart_files})
 
 
 # --- Drawing helpers for per-frame (user scene) geometry ----------------------------

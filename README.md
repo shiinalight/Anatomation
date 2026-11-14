@@ -1,7 +1,38 @@
-# Surgical Training Simulatorr
+# Surgical Training Simulator
 
 A MuJoCo hackathon demo with a Rokoko-controlled five-finger hand,
 interactive surgical instruments, and guided suturing.
+
+## Run the integrated dashboard
+
+On Windows, connect one Rokoko Smartglove over USB and run from this directory:
+
+    py -3.11 -m pip install -r requirements-mvp.txt
+    py -3.11 surgical_suturing_guided.py --mvp
+
+Add `--site heart` for heart practice or `--preview` for keyboard practice.
+On macOS, run the script with `mjpython` after installing the requirements.
+The live launcher starts the installed Rokoko driver and OpenXR solver when
+their local ports are idle.
+
+Open **Equality** in the native MuJoCo right sidebar. Click **AI Voice** to
+toggle the microphone and ask Gemini about the exercise. Click **Review scene**
+to get Gemma feedback. Click **AI Assistant** to open a small window for the
+current cue, replies, and typed questions. You can close and reopen it while the
+training scene stays open. **V** and **B** are shortcuts for voice and review.
+
+Click **Save attempt** (**J**) to save your work and start a fresh attempt.
+**AI history** loads recent attempts for the current input mode into the
+assistant window. Click **Next attempt** to select one and ask Gemini in the
+window or with **AI Voice**. Turn off **AI history** to return to live coaching.
+**R** saves and resets the exercise.
+
+For a new installation, set `SURGERY_GEMMA_API_KEY` and `AIVEN_DATABASE_URL`
+in a local `.env` using `.env.example`, and save the Aiven CA certificate as
+`aiven-ca.pem`. Attempts are queued locally and synchronized to PostgreSQL.
+Stored records include the simulator site, input mode, actions, and virtual
+tool-tip samples. Existing attempts are still available by input mode.
+Use `--ai` for the native coach controls without session recording.
 
 ## Run on macOS
 
@@ -39,7 +70,7 @@ Then launch the simulator from this directory:
 | Pick an instrument | 1 scalpel, 2 needle holder, 3 forceps, 4 scissors, then G to pick up / set down |
 | Move the hand | Arrows and Q/E (tap for a small step, hold to glide) |
 | Suturing | N aligns the tool, F punctures or grips tissue, T ties, X trims, R clears the pad |
-| Camera | Two-finger scroll to zoom, left-drag to orbit, right-drag to pan, double-right-click a spot to zoom around it, 0 resets the view |
+| Camera | Scroll to zoom, left-drag to orbit, right-drag to pan, 0 resets the view |
 | Glove | H recalibrates: rest your hand palm-down, fingers toward the monitor, then press H |
 | Sound | M mutes or unmutes the OR sounds (macOS) |
 
