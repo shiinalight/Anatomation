@@ -26,3 +26,19 @@ In another Terminal, start the hand solver:
 Then launch the simulator from this directory:
 
     mjpython surgical_suturing_guided.py
+
+## Controls
+
+| Action | Keys / mouse |
+|---|---|
+| Pick an instrument | 1 scalpel, 2 needle holder, 3 forceps, 4 scissors, then G to pick up / set down |
+| Move the hand | Arrows and Q/E (tap for a small step, hold to glide) |
+| Suturing | N aligns the tool, F punctures or grips tissue, T ties, X trims, R clears the pad |
+| Camera | Two-finger scroll to zoom, left-drag to orbit, right-drag to pan, double-right-click a spot to zoom around it, 0 resets the view |
+| Glove | H recalibrates: rest your hand palm-down, fingers toward the monitor, then press H |
+| Sound | M mutes or unmutes the OR sounds (macOS) |
+
+## Files
+
+- `surgical_suturing_guided.py`: glove tracking, instruments and the suturing logic.
+- `or_scene.py`: the operating room (layout, generated textures, lighting, patient monitor, sounds).

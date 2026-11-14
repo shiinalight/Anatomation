@@ -13,6 +13,10 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
+from or_scene import (INCISION_Y, PAD_MAX, PAD_MIN, PAD_TOP, TABLE_MAX, TABLE_MIN, TRAY_TOP,
+                      Look, Sounds, add_bar, add_capsule, add_geom, build_model, draw_monitor,
+                      surface_height)
+
 SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
 ANCHOR = np.array([0, -0.10, 1.015])
 FINGERS = {
@@ -25,102 +29,86 @@ CHAINS = {
     for finger, joints in FINGERS.items()
 }
 JOINTS = {"wrist", "palm", *(joint for chain in CHAINS.values() for joint in chain)}
-GLOVE = [.20, .48, .70, 1]
-SLEEVE = [.10, .29, .29, 1]
-PAD_MIN = np.array([-.098, -.016])
-PAD_MAX = np.array([.108, .126])
-PAD_TOP = .955
 MAX_DEPTH = .006
-METAL = [.70, .78, .83, 1]
-HANDLE = [.19, .30, .35, 1]
-TRAY_GRIP = np.array([-.221, .066, .942])
+REST_Z = TRAY_TOP + .004
+TRAY_GRIP = np.array([-.221, .066, REST_Z])
 TRAY_DIRECTION = np.array([0., 1., 0.])
 PICKUP_RADIUS = .045
-THREAD = [.13, .19, .36, 1]
-INCISION_Y = .055
 TOOL_NAMES = ("Scalpel", "Needle holder", "Forceps", "Suture scissors")
 TOOL_HOME = (
     TRAY_GRIP,
-    np.array([.27, .08, .938]),
-    np.array([-.271, .072, .941]),
-    np.array([.33, .082, .938]),
+    np.array([.27, .08, REST_Z]),
+    np.array([-.271, .072, REST_Z]),
+    np.array([.33, .082, REST_Z]),
 )
 TOOL_TIP = (.051, .084, .062, .050)
-TABLE_MIN = np.array([-.54, -.28])
-TABLE_MAX = np.array([.54, .44])
+# GLFW key code -> (axis, metres per tap). Holding a key moves at MOVE_SPEED * step / s.
+MOVES = {263: (0, -.006), 262: (0, .006), 264: (1, -.006), 265: (1, .006),
+         ord("Q"): (2, .003), ord("E"): (2, -.003)}
+MOVE_SPEED = 12      # held keys travel 12 taps per second (7 cm/s across, 3.6 cm/s up/down)
+HOLD_DELAY = .18     # a quick tap stays a single precise step
+MAC_KEYCODES = {263: 123, 262: 124, 264: 125, 265: 126, ord("Q"): 12, ord("E"): 14}
 
-LAB = """
-<mujoco model="Surgical training station">
-  <visual>
-    <global offwidth="1280" offheight="800"/>
-    <headlight ambient=".36 .38 .40" diffuse=".52 .54 .56" specular=".20 .22 .24"/>
-    <map znear=".008"/>
-  </visual>
-  <asset>
-    <texture name="floor" type="2d" builtin="checker" width="128" height="128"
-             rgb1=".27 .33 .34" rgb2=".31 .37 .38"/>
-    <material name="floor" texture="floor" texrepeat="6 6"/>
-    <material name="steel" rgba=".61 .69 .71 1" specular=".8" shininess=".65"/>
-    <material name="drape" rgba=".045 .28 .26 1" specular=".08"/>
-  </asset>
-  <default><geom contype="0" conaffinity="0"/></default>
-  <worldbody>
-    <light pos="-.23 -.16 1.65" dir=".12 .12 -1" cutoff="58" diffuse=".78 .80 .81"/>
-    <geom type="plane" size="4 4 .01" material="floor"/>
-    <geom type="box" pos="0 .68 1.18" size="1.6 .03 1.18" rgba=".55 .67 .67 1"/>
-    <geom type="box" pos="-1.5 -.12 1.18" size=".025 .84 1.18" rgba=".46 .57 .58 1"/>
-    <geom type="box" pos="0 .642 1.12" size="1.45 .009 .075" rgba=".24 .38 .38 1"/>
-    <!-- Operating table, sterile drape and silicone practice pad -->
-    <geom type="box" pos="0 .08 .876" size=".55 .37 .023" material="steel"/>
-    <geom type="box" pos="0 .09 .46" size=".31 .18 .37" rgba=".22 .33 .34 1"/>
-    <geom type="box" pos="0 .065 .909" size=".326 .285 .011" material="drape"/>
-    <geom type="box" pos="0 -.218 .856" size=".326 .008 .055" material="drape"/>
-    <geom type="box" pos="-.322 .065 .866" size=".008 .28 .044" material="drape"/>
-    <geom type="box" pos=".322 .065 .866" size=".008 .28 .044" material="drape"/>
-    <geom type="box" pos=".005 .055 .924" size=".116 .086 .006" rgba=".58 .60 .47 1"/>
-    <geom type="box" pos=".005 .055 .942" size=".103 .071 .013" rgba=".67 .41 .34 1"/>
-    <geom type="box" pos=".005 .055 .936" size=".105 .073 .003" rgba=".78 .58 .42 1"/>
-    <geom type="box" pos="0 .030 .9555" size=".085 .001 .0005" rgba=".91 .77 .66 1"/>
-    <geom type="box" pos="0 .081 .9555" size=".085 .001 .0005" rgba=".91 .77 .66 1"/>
-    <geom type="cylinder" pos="-.080 .055 .956" size=".004 .001" rgba=".92 .82 .71 1"/>
-    <geom type="cylinder" pos=".080 .055 .956" size=".004 .001" rgba=".92 .82 .71 1"/>
-    <!-- Stainless instrument trays -->
-    <geom type="box" pos="-.236 .081 .927" size=".066 .108 .005" material="steel"/>
-    <geom type="box" pos="-.299 .081 .938" size=".003 .108 .010" material="steel"/>
-    <geom type="box" pos="-.173 .081 .938" size=".003 .108 .010" material="steel"/>
-    <geom type="box" pos="-.236 -.024 .938" size=".064 .003 .010" material="steel"/>
-    <geom type="box" pos="-.236 .186 .938" size=".064 .003 .010" material="steel"/>
-    <geom type="box" pos=".297 .085 .927" size=".077 .104 .005" material="steel"/>
-    <geom type="box" pos=".222 .085 .937" size=".003 .104 .010" material="steel"/>
-    <geom type="box" pos=".373 .085 .937" size=".003 .104 .010" material="steel"/>
-    <geom type="box" pos=".297 -.016 .937" size=".074 .003 .010" material="steel"/>
-    <geom type="box" pos=".297 .186 .937" size=".074 .003 .010" material="steel"/>
-    <geom type="capsule" fromto="-.076 .055 .9559 .076 .055 .9559"
-          size=".00125" rgba=".37 .105 .097 1"/>
-    <!-- Surgical lamp and equipment mast -->
-    <geom type="capsule" fromto="-.34 .27 .92 -.34 .27 1.34" size=".013" material="steel"/>
-    <geom type="capsule" fromto="-.34 .27 1.34 -.20 .28 1.34" size=".013" material="steel"/>
-    <geom type="cylinder" pos="-.185 .28 1.309" size=".094 .023" rgba=".69 .77 .76 1"/>
-    <geom type="cylinder" pos="-.185 .28 1.283" size=".082 .005" rgba=".85 .93 .91 1"/>
-    <geom type="sphere" pos="-.219 .275 1.277" size=".016" rgba=".75 1 .96 1"/>
-    <geom type="sphere" pos="-.153 .270 1.277" size=".016" rgba=".75 1 .96 1"/>
-    <geom type="sphere" pos="-.181 .314 1.277" size=".016" rgba=".75 1 .96 1"/>
-    <!-- Patient monitor with a static training waveform -->
-    <geom type="box" pos=".287 .277 1.113" size=".124 .024 .086" rgba=".18 .27 .28 1"/>
-    <geom type="box" pos=".287 .251 1.113" size=".111 .003 .073" rgba=".025 .086 .082 1"/>
-    <geom type="capsule" fromto=".194 .247 1.105 .236 .247 1.105" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="capsule" fromto=".236 .247 1.105 .246 .247 1.116" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="capsule" fromto=".246 .247 1.116 .258 .247 1.097" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="capsule" fromto=".258 .247 1.097 .270 .247 1.150" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="capsule" fromto=".270 .247 1.150 .284 .247 1.088" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="capsule" fromto=".284 .247 1.088 .298 .247 1.105" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="capsule" fromto=".298 .247 1.105 .377 .247 1.105" size=".0018" rgba=".32 .94 .67 1"/>
-    <geom type="box" pos=".286 .278 .988" size=".024 .022 .042" material="steel"/>
-    <geom type="box" pos=".286 .278 .922" size=".077 .043 .006" material="steel"/>
-    <camera name="bench" pos=".28 -.62 1.43" xyaxes=".925 .380 0 -.202 .492 .847" fovy="45"/>
-  </worldbody>
-</mujoco>
-"""
+
+
+def _mac_key_state():
+    """Return a function telling whether a macOS key is physically down, or None."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        import ctypes
+        lib = ctypes.CDLL("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+        query = lib.CGEventSourceKeyState
+        query.argtypes, query.restype = [ctypes.c_int32, ctypes.c_uint16], ctypes.c_bool
+    except (OSError, AttributeError):
+        return None
+    return lambda code: code in MAC_KEYCODES and query(0, MAC_KEYCODES[code])
+
+
+ZOOM_IN = {ord("="), 334}    # = (or +) and keypad +
+ZOOM_OUT = {ord("-"), 333}   # - and keypad -
+RESET_VIEW = ord("0")
+
+
+def bench_view(model, data, cam):
+    """Point the free (mouse-controllable) camera exactly where the bench camera looks."""
+    cid = model.camera("bench").id
+    position = data.cam_xpos[cid]
+    forward = -data.cam_xmat[cid].reshape(3, 3)[:, 2]
+    distance = (PAD_TOP - position[2]) / forward[2]  # aim at the practice pad surface
+    cam.type = mj.mjtCamera.mjCAMERA_FREE
+    cam.lookat[:] = position + forward*distance
+    cam.distance = distance
+    cam.azimuth = np.degrees(np.arctan2(forward[1], forward[0]))
+    cam.elevation = np.degrees(np.arcsin(forward[2]))
+
+
+class HeldKeys:
+    """Turn the viewer's press-only key events into continuous movement.
+
+    MuJoCo's passive viewer never reports key releases, so a key counts as held
+    while macOS says it is down, or while the OS keeps sending repeat presses.
+    Movement only starts from a press inside the viewer window.
+    """
+
+    def __init__(self):
+        self.is_down = _mac_key_state()
+        self.keys = {}  # code -> [pressed_at, last_event_at]
+
+    def press(self, code, now):
+        if code in MOVES:
+            if code in self.keys:
+                self.keys[code][1] = now
+            else:
+                self.keys[code] = [now, now]
+
+    def moves(self, now, dt):
+        for code, (pressed_at, last_event) in list(self.keys.items()):
+            down = (self.is_down is not None and self.is_down(code)) or now - last_event < .12
+            if not down and now - pressed_at > .05:
+                del self.keys[code]
+            elif now - pressed_at >= HOLD_DELAY:
+                yield code, MOVES[code][1] * MOVE_SPEED * dt
 
 
 class Frames:
@@ -164,20 +152,86 @@ def preview_pose(phase):
     return {joint: point + ANCHOR for joint, point in points.items()}
 
 
-def world_pose(points, heading):
+def hand_basis(points):
+    """Right-handed (across, forward, back-of-hand) axes of a left hand, or None."""
+    knuckles = np.array([points[CHAINS[name][1]] for name in ("index", "middle", "ring", "little")])
+    forward = knuckles.mean(axis=0) - points["wrist"]
+    across = knuckles[0] - knuckles[-1]
+    normal = np.cross(across, forward)
+    if np.linalg.norm(forward) < .025 or np.linalg.norm(normal) < 1e-6:
+        return None
+    forward /= np.linalg.norm(forward)
+    normal /= np.linalg.norm(normal)
+    return np.column_stack((np.cross(forward, normal), forward, normal))
+
+
+def _yaw(angle):
+    c, s_ = np.cos(angle), np.sin(angle)
+    return np.array([[c, -s_, 0], [s_, c, 0], [0, 0, 1]])
+
+
+class Heading:
+    """Yaw-only glove calibration.
+
+    The Rokoko solver's pitch and roll are gravity-referenced, so they are used
+    exactly as measured: tilt your real hand and the virtual one tilts the same
+    way. Only the heading (yaw) has an arbitrary per-session zero, so it is the
+    one thing calibrated: when the hand rests roughly flat and still for
+    LOCK_TIME seconds, its averaged heading becomes "toward the screen".
+    """
+    LOCK_TIME = .5
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.angle = None          # locked yaw correction, radians
+        self.samples = []          # (time, heading) while the hand is flat and steady
+
+    @property
+    def locked(self):
+        return self.angle is not None
+
+    def rotation(self, points, now):
+        basis = hand_basis(points)
+        if basis is None:
+            return None
+        forward, normal = basis[:, 1], basis[:, 2]
+        flat_length = np.linalg.norm(forward[:2])
+        heading = np.arctan2(forward[1], forward[0])
+        if self.angle is not None:
+            return _yaw(self.angle)
+
+        flat = flat_length > .8 and abs(normal[2]) > .75
+        if flat and self.samples:
+            mean = np.angle(np.mean([np.exp(1j*h) for _, h in self.samples]))
+            if abs(np.angle(np.exp(1j*(heading - mean)))) > np.radians(12):
+                self.samples.clear()      # the hand is still turning: start over
+        if flat:
+            self.samples.append((now, heading))
+            if now - self.samples[0][0] >= self.LOCK_TIME:
+                mean = np.angle(np.mean([np.exp(1j*h) for _, h in self.samples]))
+                self.angle = np.pi/2 - mean
+                self.samples.clear()
+                return _yaw(self.angle)
+        else:
+            self.samples.clear()
+        # Until locked, keep the fingers pointing into the scene; tilt is still live.
+        return _yaw(np.pi/2 - heading if flat_length > .3 else 0.0)
+
+
+def world_pose(points, heading, now):
+    """Map glove joints (OpenXR xr_base: +X right, +Y up, -Z forward) into the
+    scene (+X right, +Y away from the camera, +Z up), wrist pinned at ANCHOR."""
     wrist = points["wrist"]
     rebased = {}
     for name, position in points.items():
         x, y, z = position - wrist
-        rebased[name] = np.array([x, -z, y])
-    if heading is None:
-        forward = rebased["middle_proximal"]
-        if np.linalg.norm(forward[:2]) < .025:
-            return None, None
-        angle = np.pi / 2 - np.arctan2(forward[1], forward[0])
-        c, s = np.cos(angle), np.sin(angle)
-        heading = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
-    return {key: ANCHOR + heading @ value for key, value in rebased.items()}, heading
+        rebased[name] = np.array([x, -z, y])   # fixed +90 deg about X: Y-up -> Z-up
+    rotation = heading.rotation(rebased, now)
+    if rotation is None:
+        return None
+    return {key: ANCHOR + rotation @ value for key, value in rebased.items()}
 
 
 def draw_hand(scene, points):
@@ -204,16 +258,13 @@ def draw_hand(scene, points):
     normal /= normal_length
     across = np.cross(forward, normal)
     basis = np.column_stack((across, forward, normal))
-    sleeve_end = wrist - forward*.017
-    capsule(wrist - forward*.14, sleeve_end, .027, SLEEVE)
-    capsule(sleeve_end, wrist + forward*.019, .023, GLOVE)
-    palm = scene.geoms[scene.ngeom]
-    mj.mjv_initGeom(
-        palm, mj.mjtGeom.mjGEOM_ELLIPSOID,
-        np.array([width*.57, length*.58, .013]),
-        wrist + forward*length*.51, basis.ravel(), np.asarray(GLOVE, dtype=np.float32),
-    )
-    scene.ngeom += 1
+    # Gown sleeve, with the glove's rolled cuff pulled over it.
+    capsule(wrist - forward*.60, wrist - forward*.07, .031, "gown")
+    capsule(wrist - forward*.095, wrist + forward*.02, .0255, GLOVE)
+    add_capsule(scene, wrist - forward*.092, wrist - forward*.082, .0322, GLOVE,
+                mj.mjtGeom.mjGEOM_CYLINDER)
+    add_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [width*.57, length*.58, .013],
+             wrist + forward*length*.51, basis, GLOVE)
 
     for finger, chain in CHAINS.items():
         thumb = finger == "thumb"
@@ -226,23 +277,9 @@ def draw_hand(scene, points):
             capsule(points[root], points[tip], radius, GLOVE)
 
 
-def draw_geom(scene, kind, size, pos, matrix, color):
-    if scene.ngeom >= scene.maxgeom:
-        return None
-    geom = scene.geoms[scene.ngeom]
-    mj.mjv_initGeom(geom, kind, np.asarray(size, dtype=float), pos, matrix.ravel(),
-                    np.asarray(color, dtype=np.float32))
-    scene.ngeom += 1
-    return geom
-
-
-def draw_capsule(scene, start, end, radius, color):
-    if np.linalg.norm(end - start) < 1e-6:
-        return
-    geom = draw_geom(scene, mj.mjtGeom.mjGEOM_CAPSULE, [1, 1, 1],
-                     np.zeros(3), np.eye(3), color)
-    if geom is not None:
-        mj.mjv_connector(geom, mj.mjtGeom.mjGEOM_CAPSULE, radius, start, end)
+GLOVE = "glove"
+draw_geom = add_geom
+draw_capsule = add_capsule
 
 
 def draw_path(scene, vertices, radius, color):
@@ -261,37 +298,71 @@ def instrument_axes(direction):
     return across, up
 
 
+def _ring(scene, centre, radius, a, b, material, wire=.0016):
+    points = [centre + radius*(np.cos(t)*a + np.sin(t)*b) for t in np.linspace(0, 2*np.pi, 13)]
+    draw_path(scene, points, wire, material)
+
+
 def draw_instrument(scene, index, grip, direction):
-    across, up = instrument_axes(direction)
+    d = direction
+    across, up = instrument_axes(d)
+    basis = np.column_stack((np.cross(up, d), up, d))
+    box, ellipsoid = mj.mjtGeom.mjGEOM_BOX, mj.mjtGeom.mjGEOM_ELLIPSOID
+
     if index == 0:
-        basis = np.column_stack((-across, np.cross(direction, -across), direction))
-        draw_capsule(scene, grip - direction*.060, grip + direction*.015, .0048, HANDLE)
-        draw_geom(scene, mj.mjtGeom.mjGEOM_BOX, [.0011, .0038, .011],
-                  grip + direction*.025, basis, METAL)
-        draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [.0009, .0032, .013],
-                  grip + direction*.038, basis, METAL)
+        # No. 3 scalpel handle (knurled grip) with a No. 15 blade, cutting edge down.
+        add_bar(scene, grip - d*.082, grip + d*.003, .0082, .0024, across, "satin")
+        add_bar(scene, grip - d*.046, grip - d*.010, .0088, .0029, across, "knurl")
+        add_bar(scene, grip + d*.002, grip + d*.013, .0042, .0019, across, "polished")
+        add_bar(scene, grip + d*.011 + up*.0006, grip + d*.040 + up*.0006, .0062, .0005, across, "blade")
+        draw_geom(scene, ellipsoid, [.0003, .0037, .0135], grip + d*.038 - up*.0004, basis, "blade")
         return
 
-    jaw_length = .058 if index == 1 else TOOL_TIP[index]
-    jaw_gap = .003 if index == 3 else .001
+    if index == 2:
+        # Adson tissue forceps: two flat spring leaves welded at the back, toothed tips.
+        back = grip - d*.050
+        for side in (-1, 1):
+            mid = grip - d*.004 + side*across*.0055
+            tip = grip + d*TOOL_TIP[2] + side*across*.0008
+            add_bar(scene, back + side*across*.0012, mid, .0068, .0013, across, "satin")
+            add_bar(scene, mid, tip, .0026, .0012, across, "satin")
+            for k in range(5):
+                at = grip - d*(.026 - k*.005) + side*across*.0062
+                add_bar(scene, at - up*.003, at + up*.003, .0007, .0006, d, "knurl")
+        draw_capsule(scene, back - d*.002, back + d*.004, .0034, "satin")
+        return
+
+    # Ring-handled instruments: Mayo-Hegar needle holder (gold rings) or Metzenbaum scissors.
+    holder = index == 1
+    pivot = grip + d*(.030 if holder else .010)
+    ring_material = "gold" if holder else "satin"
     for side in (-1, 1):
-        start = grip - direction*.038 + side*across*.007
-        end = grip + direction*jaw_length + side*across*jaw_gap
-        draw_capsule(scene, start, end, .0025, METAL)
-        if index in (1, 3):
-            angles = np.linspace(0, 2*np.pi, 9)
-            center = start - direction*.006 + side*across*.003
-            ring = [center + .007*(np.cos(t)*across + np.sin(t)*direction) for t in angles]
-            draw_path(scene, ring, .0016, METAL)
-    if index == 1:
-        # Curved needle clamped near its midpoint, with a visible thread tail.
-        center = grip + direction*.059
-        needle = [center + direction*(.025*np.sin(t)) + up*(.015*(np.cos(t)-1))
-                  for t in np.linspace(-1.45, np.pi/2, 10)]
-        draw_path(scene, needle, .00115, METAL)
+        centre = grip - d*.050 + side*across*.011
+        _ring(scene, centre, .0078, across, d, ring_material)
+        shank_start = centre + d*.0078
+        draw_capsule(scene, shank_start, pivot - d*.004 + side*across*.0012, .0021, "polished")
+        if holder:
+            ratchet = grip - d*.036
+            draw_capsule(scene, ratchet + side*across*.0072, ratchet + side*across*.0018, .0011, "satin")
+            draw_capsule(scene, pivot + d*.004 + side*up*.0007, grip + d*.058 + side*up*.0004,
+                         .0017, "polished")
+        else:
+            curve = up*.0016
+            mid = pivot + d*.022 + side*across*.0012 + curve*.4
+            tip = grip + d*TOOL_TIP[3] - side*across*.0018 + curve
+            add_bar(scene, pivot, mid, .0048, .0011, across, "polished")
+            add_bar(scene, mid, tip, .0026, .0010, across, "polished")
+    draw_geom(scene, box, [.0035, .0026, .0050], pivot, basis, "satin")
+    draw_capsule(scene, pivot - up*.0032, pivot + up*.0032, .0018, "polished", mj.mjtGeom.mjGEOM_CYLINDER)
+    if holder:
+        # Curved needle clamped near its midpoint, with the violet suture trailing.
+        centre = grip + d*.059
+        needle = [centre + d*(.025*np.sin(t)) + up*(.015*(np.cos(t)-1))
+                  for t in np.linspace(-1.45, np.pi/2, 12)]
+        draw_path(scene, needle, .00095, "polished")
         tail = needle[0]
         draw_path(scene, [tail, tail - across*.018 - up*.014,
-                          tail - across*.034 - up*.019, tail - across*.05], .00085, THREAD)
+                          tail - across*.034 - up*.019, tail - across*.05], .0006, "thread")
 
 
 class CuttingStation:
@@ -313,6 +384,9 @@ class CuttingStation:
         self.previous_tip = None
         self.depth = 0.0
         self.message = "2 (select needle holder) / G (pick up selected tool)"
+        self.events = []                 # sound cues for the display loop
+        self.blood = deque(maxlen=220)   # (position, born, final radius)
+        self.clock = 0.0
 
     def park(self):
         if self.held is None:
@@ -323,21 +397,15 @@ class CuttingStation:
         length = np.linalg.norm(flat)
         flat = flat / length if length > .001 else TRAY_DIRECTION.copy()
         x, y = xy
-        height = .899
-        if -.326 <= x <= .326 and -.220 <= y <= .350:
-            height = .920
-        if (-.302 <= x <= -.170 or .220 <= x <= .374) and -.022 <= y <= .188:
-            height = .932
-        if np.all(xy >= PAD_MIN) and np.all(xy <= PAD_MAX):
-            height = PAD_TOP
-        self.rest[self.held] = (np.array([x, y, height + .010]), flat)
+        self.rest[self.held] = (np.array([x, y, surface_height(x, y) + .004]), flat)
+        self.events.append("setdown")
         self.held = self.tool_pose = self.previous_tip = self.tissue_grip = None
         self.pinch_finger = None
         self.guide_tip = None
         self.guide_lower_steps = 0
         self.message = "G (pick up selected tool)"
 
-    def update(self, pose, keys):
+    def update(self, pose, keys, held=()):
         if pose is None:
             self.park()
             self.pinching = False
@@ -353,6 +421,9 @@ class CuttingStation:
 
         for key in keys:
             self.key(key, pose)
+        for code, amount in held:
+            if not self.guided_lowering(code):
+                self.move(code, amount, pose)
 
         if self.held is None and self.pinching and not was_pinching:
             point = self.grip(pose, closest) + self.offset
@@ -414,27 +485,34 @@ class CuttingStation:
         self.pinch_finger = finger
         self.offset[:] = self.rest[index][0] - self.grip(pose, finger or "index")
         self.tool_pose = self.pose_for_tool(pose)
+        self.events.append("pickup")
         self.message = {
             0: "Arrows (move) / E (lower blade) / G (set down)",
             2: "N (align forceps) / F (grip edge)",
             3: "N (align scissors) / X (trim thread)",
         }.get(index, "N (align needle)")
 
+    def move(self, code, amount, pose):
+        axis = MOVES[code][0]
+        self.update_tool_pose(pose)
+        self.guide_tip = None
+        self.guide_lower_steps = 0
+        limit = .75 if axis < 2 else .45
+        self.offset[axis] = np.clip(self.offset[axis]+amount, -limit, limit)
+
+    def guided_lowering(self, code):
+        return self.held == 1 and self.guide_tip is not None and code == ord("E")
+
     def key(self, code, pose):
-        moves = {263: (0, -.006), 262: (0, .006), 264: (1, -.006), 265: (1, .006),
-                 ord("Q"): (2, .003), ord("E"): (2, -.003)}
-        if code in moves:
-            axis, amount = moves[code]
-            if self.held == 1 and self.guide_tip is not None and code == ord("E"):
+        if code in MOVES:
+            amount = MOVES[code][1]
+            if self.guided_lowering(code):
+                # Guided needle lowering stays in discrete taps.
                 if self.guide_lower_steps:
                     self.guide_tip[2] += amount
                     self.guide_lower_steps -= 1
             else:
-                self.update_tool_pose(pose)
-                self.guide_tip = None
-                self.guide_lower_steps = 0
-                limit = .75 if axis < 2 else .45
-                self.offset[axis] = np.clip(self.offset[axis]+amount, -limit, limit)
+                self.move(code, amount, pose)
         elif ord("1") <= code <= ord("4"):
             self.selected = code - ord("1")
             self.message = f"G (pick up {TOOL_NAMES[self.selected]})"
@@ -507,6 +585,7 @@ class CuttingStation:
                 self.message = "N (align scissors) / X (trim thread)"
                 return
             self.stitches[-1] = (entry, exit, True)
+            self.events.append("trim")
             self.message = "G (set down scissors; thread trimmed)"
             return
 
@@ -521,6 +600,7 @@ class CuttingStation:
                 self.message = "Pad full - press R to reset"
                 return
             self.stitches.append((self.entry, self.exit, False))
+            self.events.append("tie")
             self.entry = self.exit = None
             self.guide_tip = None
             return
@@ -543,8 +623,12 @@ class CuttingStation:
         if self.entry is None:
             self.entry = point
             self.guide_tip = None
+            self.bleed(point, .0011)
+            self.events.append("puncture")
         elif side*(self.entry[1]-INCISION_Y) < 0 and abs(point[0]-self.entry[0]) <= .027:
             self.exit = point
+            self.bleed(point, .0011)
+            self.events.append("puncture")
             self.message = "Press T to tighten and tie"
         else:
             self.message = "Place the exit across from the entry"
@@ -559,21 +643,49 @@ class CuttingStation:
         if self.previous_tip is not None:
             distance = np.linalg.norm(point-self.previous_tip)
             if .0012 <= distance <= .025:
-                self.marks.append((self.previous_tip, point, self.depth))
+                self.marks.append(self.wound_segment(self.previous_tip, point, self.depth))
+                # Deeper cuts ooze: drops appear along the wound and slowly spread.
+                if self.depth > .0012 and np.random.random() < .18 + 40*self.depth:
+                    along = (point - self.previous_tip) / distance
+                    beside = np.cross(along, [0, 0, 1])*np.random.uniform(-.0015, .0015)
+                    self.bleed(point + beside, np.random.uniform(.0014, .0018) + .35*self.depth)
             elif distance < .0012:
                 return
         self.previous_tip = point
 
-    def draw(self, scene):
+    @staticmethod
+    def wound_segment(start, end, depth):
+        """Precomputed flat ellipses for one cut segment: pink everted edges around a
+        wet dark gap that widens with depth, so the cut reads as an opening in the skin."""
+        radius = .0006 + .24*depth
+        along = end - start
+        length = max(np.linalg.norm(along), 1e-6)
+        along = along / length
+        basis = np.column_stack((along, np.cross([0, 0, 1], along), [0, 0, 1])).ravel()
+        centre = (start + end)/2
+        return (np.array([length/2 + radius*2.2, radius*2.0, .0003]), centre - [0, 0, .0004],
+                np.array([length/2 + radius, radius*.85, .0004]), centre, basis)
+
+    def bleed(self, point, radius):
+        self.blood.append((np.array([point[0], point[1], PAD_TOP + .0004]), self.clock, radius))
+
+    def draw(self, scene, now=None):
+        if now is not None:
+            self.clock = now
         for index, pose in enumerate(self.rest):
             draw_instrument(scene, index, *(self.tool_pose if index == self.held else pose))
         if self.tissue_grip is not None and self.held == 2:
             tip = self.active_tip()
             displacement = np.clip(tip - self.tissue_grip, -.024, .024)
-            draw_capsule(scene, self.tissue_grip, self.tissue_grip + displacement,
-                         .003, [.74, .44, .38, 1])
-        for start, end, depth in self.marks:
-            draw_capsule(scene, start, end, .0006 + .24*depth, [.22, .055, .049, 1])
+            draw_capsule(scene, self.tissue_grip, self.tissue_grip + displacement, .003, "lip")
+        ellipse = mj.mjtGeom.mjGEOM_ELLIPSOID
+        for lip_size, lip_pos, gap_size, gap_pos, basis in self.marks:
+            draw_geom(scene, ellipse, lip_size, lip_pos, basis, "lip")
+            draw_geom(scene, ellipse, gap_size, gap_pos, basis, "wound")
+        for position, born, radius in self.blood:
+            grow = min(1.0, max(self.clock - born, 0) / 2.5)**.5
+            r = radius*(.35 + .65*grow)
+            draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [r, r*.9, r*.28], position, np.eye(3), "blood")
         for entry, exit, trimmed in self.stitches:
             self.draw_thread(scene, entry, exit, True, trimmed)
         if self.entry is not None:
@@ -586,52 +698,97 @@ class CuttingStation:
     @staticmethod
     def draw_thread(scene, entry, exit, tied, trimmed):
         mid = (entry+exit)/2 + np.array([0., 0., .003 if tied else .013])
-        draw_path(scene, [entry, (entry+mid)/2, mid, (mid+exit)/2, exit], .0012, THREAD)
+        draw_path(scene, [entry, (entry+mid)/2, mid, (mid+exit)/2, exit], .0008, "thread")
         if tied:
             knot = exit + np.array([0., 0., .001])
-            draw_geom(scene, mj.mjtGeom.mjGEOM_SPHERE, [.002, 0, 0], knot, np.eye(3), THREAD)
+            draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [.0019, .0014, .0012], knot, np.eye(3), "thread")
             length = .003 if trimmed else .012
-            draw_capsule(scene, knot, knot + np.array([length, length*.6, 0.]), .001, THREAD)
+            for spread in (.6, -.2):
+                draw_capsule(scene, knot, knot + np.array([length, length*spread, .0004]), .0006, "thread")
+
+
+def draw_user(scene, points, station, now):
+    """Everything that moves: glove, instruments, wounds, sutures and the patient monitor."""
+    draw_hand(scene, points)
+    station.draw(scene, now)
+    draw_monitor(scene, now)
 
 
 def display(frames, preview):
-    model = mj.MjModel.from_xml_string(LAB)
+    model = build_model()
+    Look.model = model
     data = mj.MjData(model)
     mj.mj_forward(model, data)
-    heading = None
+    heading = Heading()
     last_status = None
     keys = SimpleQueue()
     station = CuttingStation()
+    held_keys = HeldKeys()
+    sounds = Sounds()
+    last_frame = time.monotonic()
     print("1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
-          "Arrows move, Q/E raise/lower. N aligns tools, F punctures or grips tissue, T ties, X trims. R clears pad.",
+          "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
+          "N aligns tools, F punctures or grips tissue, T ties, X trims. R clears pad.\n"
+          "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan,\n"
+          "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
+          "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
+          "M mutes or unmutes the OR sounds.",
           flush=True)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
         with viewer.lock():
-            viewer.cam.type = mj.mjtCamera.mjCAMERA_FIXED
-            viewer.cam.fixedcamid = model.camera("bench").id
+            bench_view(model, data, viewer.cam)
         overlay = getattr(viewer, "set_texts", None)
         next_overlay = 0.0
         while viewer.is_running():
             now = time.monotonic()
+            dt = min(now - last_frame, .1)
+            last_frame = now
             pressed = []
             while not keys.empty():
-                pressed.append(keys.get_nowait())
+                code = keys.get_nowait()
+                if code in MOVES and code in held_keys.keys:
+                    held_keys.press(code, now)  # OS auto-repeat: continuous motion handles it
+                    continue
+                held_keys.press(code, now)
+                pressed.append(code)
+            held = list(held_keys.moves(now, dt))
+            if ord("M") in pressed:
+                sounds.muted = not sounds.muted
+                pressed = [code for code in pressed if code != ord("M")]
+            zoom = [code for code in pressed if code in ZOOM_IN | ZOOM_OUT | {RESET_VIEW}]
+            if zoom:
+                pressed = [code for code in pressed if code not in zoom]
+                with viewer.lock():
+                    for code in zoom:
+                        if code == RESET_VIEW:
+                            bench_view(model, data, viewer.cam)
+                        else:
+                            if viewer.cam.type != mj.mjtCamera.mjCAMERA_FREE:
+                                bench_view(model, data, viewer.cam)
+                            factor = .8 if code in ZOOM_IN else 1.25
+                            viewer.cam.distance = float(np.clip(viewer.cam.distance*factor, .03, 6))
 
             sample = frames.latest
             if preview:
                 status, points = "Keyboard practice", preview_pose(-1.2)
             elif sample is None or now - sample[0] > .5:
                 status, points = "Waiting for the Rokoko hand stream", None
-                heading = None
             else:
-                points, heading = world_pose(sample[1], heading)
-                status = "Rokoko live" if points else "Hold your hand flat to align"
+                if ord("H") in pressed:
+                    heading.reset()
+                    pressed = [key for key in pressed if key != ord("H")]
+                points = world_pose(sample[1], heading, now)
+                status = ("Rokoko live" if heading.locked
+                          else "Rest your hand flat, fingers toward the screen")
 
-            points = station.update(points, pressed)
+            points = station.update(points, pressed, held)
             with viewer.lock():
-                draw_hand(viewer.user_scn, points)
-                station.draw(viewer.user_scn)
+                draw_user(viewer.user_scn, points, station, now)
+            for event in station.events:
+                sounds.play(event)
+            station.events.clear()
+            sounds.heartbeat(now)
 
             if status != last_status:
                 print(status, flush=True)
@@ -659,7 +816,9 @@ def main():
     stream_script = SDK / "rgmp_stream.py"
     if not stream_script.is_file():
         parser.error(f"Missing Rokoko SDK example: {stream_script}")
-    print("Connect only the left glove and hold your hand flat at startup.", flush=True)
+    print("Connect only the left glove. Tilt and roll follow your hand directly; to set the\n"
+          "direction, rest your hand flat with fingers toward the screen for half a second.\n"
+          "Press H any time to set the direction again.", flush=True)
     with subprocess.Popen(
         [sys.executable, "-u", str(stream_script), "--port", "12277",
          "--group-name", "joints_openxr", "--measure-type", "TRANSFORM"],
