@@ -1,10 +1,13 @@
-"""Practice incisions and sutures on skin or on a heart in a glove-controlled MuJoCo operating room."""
+"""Practice incisions and sutures with both hands, on skin or on a heart, in a glove-controlled
+MuJoCo operating room."""
 
 import argparse
 from collections import deque
+import json
 from queue import SimpleQueue
-from pathlib import Path
-import subprocess
+import re
+import socket
+import struct
 import sys
 import threading
 import time
@@ -13,13 +16,17 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
-from bypass import BypassProcedure
+from bypass import STITCHES_PER_ANASTOMOSIS, BypassProcedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
                       surface_strip, CLEAR_BUTTON, GUIDE_BUTTON, PanelButton, SiteSwitch)
 
-SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
+GLOVE_PORT = 12277     # rkk-hand-solver's RGMP v2 output (both gloves, one device each)
+SIDES = ("left", "right")
+OTHER = {"left": "right", "right": "left"}
 ANCHOR = np.array([0, -0.10, 1.015])
+# Where each wrist is pinned before the keyboard moves it (the gloves track rotation only).
+HAND_ANCHOR = {"left": ANCHOR + [-.13, 0, 0], "right": ANCHOR + [.13, 0, 0]}
 FINGERS = {
     "thumb": ("metacarpal", "proximal", "distal", "tip"),
     **{name: ("metacarpal", "proximal", "intermediate", "distal", "tip")
@@ -43,6 +50,9 @@ TOOL_HOME = (
     np.array([.33, .082, REST_Z]),
 )
 TOOL_TIP = (.051, .084, .062, .050)
+SWITCH_HAND = ord("Z")    # keyboard control moves to the other hand (it also follows the steps)
+PULL_HEIGHT = .009        # forceps lift that pulls the suture through after the needle exits
+THROWS = ("double wrap", "single wrap, reversed", "single wrap, squares the knot")
 # GLFW key code -> (axis, metres per tap). Holding a key moves at MOVE_SPEED * step / s.
 MOVES = {263: (0, -.006), 262: (0, .006), 264: (1, -.006), 265: (1, .006),
          ord("Q"): (2, .003), ord("E"): (2, -.003)}
@@ -64,6 +74,98 @@ def _mac_key_state():
     except (OSError, AttributeError):
         return None
     return lambda code: code in MAC_KEYCODES and query(0, MAC_KEYCODES[code])
+
+
+_RGMP_SIZES = {"INT32": 4, "UINT32": 4, "INT64": 8, "UINT64": 8, "FLOAT": 4, "DOUBLE": 8}
+
+
+def _rgmp_size(data_type):
+    m = re.match(r"^(INT32|UINT32|INT64|UINT64|FLOAT|DOUBLE)(?:\[(\d+)(?:,\s*(\d+))?\])?$",
+                 data_type.strip())
+    if not m:
+        raise ValueError(f"unknown RGMP data type {data_type!r}")
+    return _RGMP_SIZES[m.group(1)]*int(m.group(2) or 1)*int(m.group(3) or 1)
+
+
+class GloveStream:
+    """Both Smartgloves from rkk-hand-solver (RGMP v2 over TCP).
+
+    The solver announces each glove as its own device, with `device_info.hand` naming the
+    side, so the joints of each hand are kept apart by device id. `latest[side]` is
+    (receive time, {joint: xr_base position}).
+    """
+
+    def __init__(self, port=GLOVE_PORT):
+        self.port = port
+        self.latest = {}
+        self.devices = {}    # device id -> (side, openxr group index, [(byte offset, joint)])
+
+    def run(self):
+        while True:
+            try:
+                self._session()
+            except (OSError, ValueError, KeyError, struct.error, json.JSONDecodeError):
+                pass
+            time.sleep(1)
+
+    def _session(self):
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as sock:
+            sock.settimeout(10)
+            self.devices.clear()
+
+            def receive(n):
+                buf = bytearray()
+                while len(buf) < n:
+                    chunk = sock.recv(n - len(buf))
+                    if not chunk:
+                        raise ConnectionError("glove stream closed")
+                    buf += chunk
+                return bytes(buf)
+
+            while True:
+                kind, length = struct.unpack("<II", receive(8))
+                payload = receive(length)
+                if kind == 1:
+                    self._define(json.loads(payload))
+                elif kind == 2:
+                    self._data(payload)
+                elif kind == 3 and len(payload) >= 4:
+                    self.devices.pop(struct.unpack_from("<I", payload)[0], None)
+
+    def _define(self, definition):
+        groups = definition.get("groups", [])
+        side = (definition.get("device_info") or {}).get("hand")
+        if side not in SIDES:
+            frames = [s.get("target_frame", "") for g in groups for s in g.get("streams", [])]
+            side = next((name for name in SIDES if any(f.startswith(name + "_") for f in frames)), None)
+        if side is None:
+            return
+        for index, group in enumerate(groups):
+            if group.get("name") != "joints_openxr":
+                continue
+            offset, joints = 0, []
+            for stream in group.get("streams", []):
+                size = _rgmp_size(stream["data_type"])
+                name = stream.get("target_frame", "").removeprefix("xr_")
+                if (name in JOINTS and stream.get("measure_type") == "TRANSFORM"
+                        and stream["data_type"].startswith("FLOAT") and size >= 12):
+                    joints.append((offset, name))
+                offset += size
+            self.devices[int(definition["device_id"])] = (side, index, joints)
+
+    def _data(self, payload):
+        device, group, _ = struct.unpack_from("<IIQ", payload)
+        entry = self.devices.get(device)
+        if entry is None or group != entry[1]:
+            return
+        side, _, joints = entry
+        positions = {}
+        for offset, name in joints:
+            point = np.array(struct.unpack_from("<3f", payload, 16 + offset))
+            if np.isfinite(point).all():
+                positions[name] = point
+        if positions.keys() >= JOINTS:
+            self.latest[side] = (time.monotonic(), positions)
 
 
 ZOOM_IN = {ord("="), 334}    # = (or +) and keypad +
@@ -120,33 +222,9 @@ class HeldKeys:
                 yield code, MOVES[code][1] * MOVE_SPEED * dt
 
 
-class Frames:
-    def __init__(self):
-        self.latest = None
-
-    def read(self, stream):
-        timestamp, positions = None, {}
-        for line in stream:
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) != 8 or parts[1] != "joints_openxr" or parts[4] != "TRANSFORM":
-                continue
-            stamp, joint = parts[0], parts[2].removeprefix("xr_")
-            if joint not in JOINTS:
-                continue
-            if stamp != timestamp:
-                timestamp, positions = stamp, {}
-            try:
-                point = np.array([float(x) for x in parts[7].split(",")[:3]])
-            except ValueError:
-                continue
-            if point.shape != (3,) or not np.isfinite(point).all():
-                continue
-            positions[joint] = point
-            if positions.keys() >= JOINTS:
-                self.latest = (time.monotonic(), positions.copy())
-
-
-def preview_pose(phase):
+def preview_pose(phase, side="left"):
+    """A relaxed hand for keyboard practice (and for a glove that is not streaming)."""
+    mirror = -1 if side == "right" else 1
     points = {"wrist": np.zeros(3), "palm": np.array([0, .048, 0])}
     for finger, x, length, spread in (
         ("thumb", .027, .097, .065), ("index", .030, .169, .016),
@@ -157,12 +235,12 @@ def preview_pose(phase):
         for i, joint in enumerate(chain):
             t = i / (len(chain) - 1)
             curl = (.5 + .5 * np.sin(phase - x * 22)) * max(t - .40, 0)**1.7
-            points[joint] = np.array([x + spread*t, .014 + length*t - .095*curl, -.11*curl])
-    return {joint: point + ANCHOR for joint, point in points.items()}
+            points[joint] = np.array([mirror*(x + spread*t), .014 + length*t - .095*curl, -.11*curl])
+    return {joint: point + HAND_ANCHOR[side] for joint, point in points.items()}
 
 
 def hand_basis(points):
-    """Right-handed (across, forward, back-of-hand) axes of a left hand, or None."""
+    """(across, forward, palm normal) axes of a hand, or None."""
     knuckles = np.array([points[CHAINS[name][1]] for name in ("index", "middle", "ring", "little")])
     forward = knuckles.mean(axis=0) - points["wrist"]
     across = knuckles[0] - knuckles[-1]
@@ -229,9 +307,9 @@ class Heading:
         return _yaw(np.pi/2 - heading if flat_length > .3 else 0.0)
 
 
-def world_pose(points, heading, now):
+def world_pose(points, heading, now, anchor):
     """Map glove joints (OpenXR xr_base: +X right, +Y up, -Z forward) into the
-    scene (+X right, +Y away from the camera, +Z up), wrist pinned at ANCHOR."""
+    scene (+X right, +Y away from the camera, +Z up), wrist pinned at `anchor`."""
     wrist = points["wrist"]
     rebased = {}
     for name, position in points.items():
@@ -240,11 +318,10 @@ def world_pose(points, heading, now):
     rotation = heading.rotation(rebased, now)
     if rotation is None:
         return None
-    return {key: ANCHOR + rotation @ value for key, value in rebased.items()}
+    return {key: anchor + rotation @ value for key, value in rebased.items()}
 
 
-def draw_hand(scene, points):
-    scene.ngeom = 0
+def draw_hand(scene, points, active=False):
     if points is None:
         return
 
@@ -272,6 +349,9 @@ def draw_hand(scene, points):
     capsule(wrist - forward*.095, wrist + forward*.02, .0255, GLOVE)
     add_capsule(scene, wrist - forward*.092, wrist - forward*.082, .0322, GLOVE,
                 mj.mjtGeom.mjGEOM_CYLINDER)
+    if active:   # green band on the cuff of the hand the keyboard controls
+        add_capsule(scene, wrist - forward*.125, wrist - forward*.112, .0328, "button_next",
+                    mj.mjtGeom.mjGEOM_CYLINDER)
     add_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [width*.57, length*.58, .013],
              wrist + forward*length*.51, basis, GLOVE)
 
@@ -374,363 +454,695 @@ def draw_instrument(scene, index, grip, direction):
                           tail - across*.034 - up*.019, tail - across*.05], .0006, "thread")
 
 
+UP = np.array([0., 0., 1.])
+
+
+class Hand:
+    """One gloved hand: its keyboard offset, the tool it holds and what it is holding on to."""
+
+    def __init__(self, side):
+        self.side = side
+        self.label = side.capitalize()
+        self.heading = Heading()
+        self.pose = None          # glove joints in the scene, before `offset`
+        self.offset = np.zeros(3)
+        self.selected = 2 if side == "left" else 1
+        self.held = None
+        self.tool_pose = None
+        self.pinch_finger = None
+        self.pinching = False
+        self.guide_tip = None     # assisted needle tip target (N)
+        self.guide_lower_steps = 0
+        self.previous_tip = None
+        self.depth = 0.0
+        self.cut_line = None      # marked incision the scalpel is guided along (bypass)
+        self.grip = None          # tissue point held by the forceps or pressed by the fingers
+        self.grip_pass = None     # which needle pass the grip was taken for (see `passes`)
+
+    @property
+    def tool(self):
+        return "empty" if self.held is None else TOOL_NAMES[self.held].lower()
+
+
 class CuttingStation:
-    """Instrument handling, cutting and suturing on the tissue surface (via `tissue`),
-    with the incision and stitch geometry of the chosen site."""
+    """Both hands' instruments, cutting and suturing on the tissue surface (via `tissue`),
+    with the incision and stitch geometry of the chosen site.
+
+    The technique follows theatre practice. The right hand cuts and drives the needle, and
+    the left hand works against it:
+      - cutting: the left hand steadies the tissue next to the blade (fingers stretching the
+        skin, or forceps holding the vessel wall); the blade does not open unsteadied tissue;
+      - each needle pass: the forceps first lift the edge the needle goes through;
+      - after the exit: the forceps grasp the needle tip and pull the suture through (Q);
+      - knot: instrument tie with the needle holder, three throws (T).
+    Any tool can be taken by either hand; the prompts name the usual one. Keyboard control
+    follows whichever hand the next step needs, and Z swaps it by hand.
+    """
 
     def __init__(self, tissue):
         self.tissue = tissue
         self.site = tissue.site
         self.procedure = BypassProcedure(tissue) if self.site.procedure == "cabg" else None
-        self.cut_line = None     # marked incision the scalpel is guided along (bypass)
+        self.hands = {side: Hand(side) for side in SIDES}
+        self.active = "right"
+        self.need = None              # hand the current step needs (keyboard follows it)
         self.marks = deque(maxlen=450)
         self.stitches = []
         self.entry = None
         self.exit = None
-        self.tissue_grip = None
-        self.offset = np.zeros(3)
+        self.passes = 0               # needle passes so far: each needs a fresh forceps grip
+        self.needle_grasp = None      # forceps tip height when it took the needle at the exit
+        self.pulled = False
+        self.throws = 0
         self.rest = [(position.copy(), TRAY_DIRECTION.copy()) for position in TOOL_HOME]
-        self.selected = 0
-        self.held = None
-        self.tool_pose = None
-        self.pinch_finger = None
-        self.pinching = False
-        self.guide_tip = None
-        self.guide_lower_steps = 0
-        self.previous_tip = None
-        self.depth = 0.0
-        self.message = "2 then G: pick up the needle holder"
+        self._message, self._message_at = "", -1e9
         self.events = []                 # sound cues for the display loop
         self.blood = deque(maxlen=220)   # (position, born, final radius)
         self.clock = 0.0
+        reach = .004 if self.procedure is not None else max(.004, self.site.bite_guide*.9)
+        self.edge_reach = reach                                   # forceps grip to needle pass
+        self.steady_reach = max(.012, self.site.half*.8)          # steadying hand to blade
 
-    def park(self):
-        if self.held is None:
-            return
-        grip, direction = self.tool_pose
-        xy = np.clip(grip[:2], TABLE_MIN, TABLE_MAX)
-        flat = np.array([direction[0], direction[1], 0.])
-        length = np.linalg.norm(flat)
-        flat = flat / length if length > .001 else TRAY_DIRECTION.copy()
-        x, y = xy
-        self.rest[self.held] = (np.array([x, y, self.tissue.rest_height(x, y) + .004]), flat)
-        self.events.append("setdown")
-        self.held = self.tool_pose = self.previous_tip = self.tissue_grip = None
-        self.cut_line = None
-        self.pinch_finger = None
-        self.guide_tip = None
-        self.guide_lower_steps = 0
-        self.message = "G (pick up selected tool)"
+    # --- small helpers ---------------------------------------------------------------
+    @property
+    def message(self):
+        return self._message
 
-    def update(self, pose, keys, held=()):
-        if pose is None:
-            self.park()
-            self.pinching = False
-            return None
-        thumb = pose["thumb_tip"]
-        fingers = ("index", "middle", "ring")
-        closest = min(fingers, key=lambda name: np.linalg.norm(pose[f"{name}_tip"] - thumb))
-        gap = np.linalg.norm(pose[f"{self.pinch_finger or closest}_tip"] - thumb)
-        was_pinching = self.pinching
-        self.pinching = gap < (.042 if was_pinching else .032)
-        if self.pinch_finger and not self.pinching:
-            self.park()
+    @message.setter
+    def message(self, text):
+        self._message, self._message_at = text, time.monotonic()
 
-        for key in keys:
-            self.key(key, pose)
-        for code, amount in held:
-            if not self.guided_lowering(code):
-                self.move(code, amount, pose)
+    def other(self, hand):
+        return self.hands[OTHER[hand.side]]
 
-        if self.held is None and self.pinching and not was_pinching:
-            point = self.grip(pose, closest) + self.offset
-            nearest = min(range(4), key=lambda index: np.linalg.norm(self.rest[index][0]-point))
-            if np.linalg.norm(self.rest[nearest][0] - point) <= PICKUP_RADIUS:
-                self.pick_up(nearest, pose, closest)
-        self.update_tool_pose(pose)
-        if self.held == 0:
-            grip, direction = self.tool_pose
-            self.cut(grip + direction*TOOL_TIP[0])
-        else:
-            self.cut(None)
-        return {name: point + self.offset for name, point in pose.items()}
+    def holder(self, index):
+        return next((hand for hand in self.hands.values() if hand.held == index), None)
+
+    @property
+    def depth(self):
+        return max(hand.depth for hand in self.hands.values())
+
+    def surface(self, xy, lift=0.0):
+        point = self.tissue.point(xy[:2], lift)
+        if point is None and hasattr(self.tissue, "any_point"):
+            point = self.tissue.any_point(xy[:2], lift)
+        return point
+
+    def surface_height(self, x, y):
+        z = self.tissue.height(x, y)
+        if z is None and hasattr(self.tissue, "any_height"):
+            z = self.tissue.any_height(x, y)
+        return z
 
     @staticmethod
-    def grip(pose, finger):
+    def grip_point(pose, finger):
         return (pose["thumb_tip"] + pose[f"{finger}_tip"]) / 2
 
-    def pose_for_tool(self, pose):
-        grip = self.grip(pose, self.pinch_finger or "index") + self.offset
-        direction = pose["middle_proximal"] - pose["wrist"]
+    def fingertip(self, hand):
+        """Where an empty hand touches the tissue: between thumb and index tips."""
+        return self.grip_point(hand.pose, "index") + hand.offset
+
+    def contact(self, hand):
+        return self.fingertip(hand) if hand.held is None else self.active_tip(hand)
+
+    # --- holding and moving tools ------------------------------------------------------
+    def park(self, hand):
+        if hand.held is not None:
+            grip, direction = hand.tool_pose
+            xy = np.clip(grip[:2], TABLE_MIN, TABLE_MAX)
+            flat = np.array([direction[0], direction[1], 0.])
+            length = np.linalg.norm(flat)
+            flat = flat / length if length > .001 else TRAY_DIRECTION.copy()
+            x, y = xy
+            self.rest[hand.held] = (np.array([x, y, self.tissue.rest_height(x, y) + .004]), flat)
+            self.events.append("setdown")
+            if hand.held == 2 and self.needle_grasp is not None and self.throws == 0:
+                self.needle_grasp, self.pulled = None, False   # the needle slips back
+            self.message = f"{hand.label} hand: G (pick up selected tool)"
+        hand.held = hand.tool_pose = hand.previous_tip = hand.grip = None
+        hand.cut_line = hand.pinch_finger = hand.guide_tip = None
+        hand.guide_lower_steps = 0
+        hand.depth = 0.0
+
+    def park_all(self):
+        for hand in self.hands.values():
+            if hand.held is not None and hand.pose is not None:
+                hand.tool_pose = self.pose_for_tool(hand)
+            self.park(hand)
+
+    def update(self, poses, keys, held=()):
+        """`poses`: side -> scene joints (or None); returns side -> drawn joints."""
+        for side, hand in self.hands.items():
+            pose = poses.get(side)
+            hand.pose = pose
+            if pose is None:
+                self.park(hand)
+                hand.pinching = False
+                continue
+            thumb = pose["thumb_tip"]
+            closest = min(("index", "middle", "ring"),
+                          key=lambda name: np.linalg.norm(pose[f"{name}_tip"] - thumb))
+            hand.closest = closest
+            gap = np.linalg.norm(pose[f"{hand.pinch_finger or closest}_tip"] - thumb)
+            hand.was_pinching = hand.pinching
+            hand.pinching = gap < (.042 if hand.was_pinching else .032)
+            if hand.pinch_finger and not hand.pinching:
+                self.park(hand)
+
+        for key in keys:
+            self.key(key)
+        active = self.hands[self.active]
+        if active.pose is not None:
+            for code, amount in held:
+                if not self.guided_lowering(active, code):
+                    self.move(active, code, amount)
+
+        for hand in self.hands.values():
+            if hand.pose is None:
+                continue
+            if hand.held is None and hand.pinching and not hand.was_pinching:
+                point = self.grip_point(hand.pose, hand.closest) + hand.offset
+                free = [i for i in range(4) if self.holder(i) is None]
+                if free:
+                    nearest = min(free, key=lambda i: np.linalg.norm(self.rest[i][0] - point))
+                    if np.linalg.norm(self.rest[nearest][0] - point) <= PICKUP_RADIUS:
+                        self.pick_up(hand, nearest, hand.closest)
+            self.update_tool_pose(hand)
+            if hand.grip is not None:   # a grip lets go when the hand moves away from it
+                gap = self.contact(hand) - hand.grip
+                if np.linalg.norm(gap[:2]) > .03 or gap[2] > .045:
+                    hand.grip = None
+            if hand.held == 0:
+                grip, direction = hand.tool_pose
+                self.cut(hand, grip + direction*TOOL_TIP[0])
+            else:
+                self.cut(hand, None)
+        self.check_pull()
+
+        side, _ = self.plan()
+        if side != self.need:          # keyboard control follows the step's hand
+            self.need = side
+            if side is not None:
+                self.active = side
+        return {side: None if hand.pose is None else
+                {name: point + hand.offset for name, point in hand.pose.items()}
+                for side, hand in self.hands.items()}
+
+    def pose_for_tool(self, hand):
+        grip = self.grip_point(hand.pose, hand.pinch_finger or "index") + hand.offset
+        direction = hand.pose["middle_proximal"] - hand.pose["wrist"]
         direction = direction / max(np.linalg.norm(direction), 1e-9)
         direction[2] -= .36
         return grip, direction / max(np.linalg.norm(direction), 1e-9)
 
-    def update_tool_pose(self, pose):
-        if self.held is None:
+    def update_tool_pose(self, hand):
+        if hand.held is None or hand.pose is None:
             return
-        self.tool_pose = self.pose_for_tool(pose)
-        if self.held == 1 and self.guide_tip is not None:
+        hand.tool_pose = self.pose_for_tool(hand)
+        if hand.held == 1 and hand.guide_tip is not None:
             # Keep the assisted needle tip at its target as the glove rotates.
-            self.offset += self.guide_tip - self.active_tip()
-            self.tool_pose = self.pose_for_tool(pose)
+            hand.offset += hand.guide_tip - self.active_tip(hand)
+            hand.tool_pose = self.pose_for_tool(hand)
 
-    def action_prompt(self):
-        if self.procedure is not None:
-            return self.procedure.prompt(self)
-        if self.held != 1:
-            return self.message
-        if self.exit is not None:
-            return "T (tighten and tie stitch)"
-        if self.guide_tip is None:
-            return ("N (align over opposite edge)" if self.entry is not None
-                    else "N (align needle for next stitch)")
-        if self.guide_lower_steps:
-            count = self.guide_lower_steps
-            key = f"{count}xE" if count > 1 else "E"
-            return f"{key} (lower needle to the {self.site.noun})"
-        return "F (puncture opposite edge)" if self.entry is not None else "F (puncture first edge)"
-
-    def active_tip(self):
-        grip, direction = self.tool_pose
-        tip = grip + direction*TOOL_TIP[self.held]
-        if self.held == 1:
+    def active_tip(self, hand):
+        grip, direction = hand.tool_pose
+        tip = grip + direction*TOOL_TIP[hand.held]
+        if hand.held == 1:
             _, up = instrument_axes(direction)
             tip -= up*.015
         return tip
 
-    def pick_up(self, index, pose, finger=None):
-        self.held = self.selected = index
-        self.pinch_finger = finger
-        self.offset[:] = self.rest[index][0] - self.grip(pose, finger or "index")
-        self.tool_pose = self.pose_for_tool(pose)
-        self.events.append("pickup")
-        self.message = {
-            0: "Arrows move, E lowers blade, G set down",
-            2: "N (align forceps) / F (grip edge)",
-            3: "N (align scissors) / X (trim thread)",
-        }.get(index, "N (align needle)")
-
-    def move(self, code, amount, pose):
-        axis = MOVES[code][0]
-        self.update_tool_pose(pose)
-        if self.cut_line is not None and self.held == 0 and axis != 1:
-            if axis == 0:
-                self.slide_along_cut(amount)
-            else:
-                self.offset[2] += amount
+    def pick_up(self, hand, index, finger=None):
+        owner = self.holder(index)
+        if owner is not None:
+            self.message = f"The {owner.side} hand holds the {TOOL_NAMES[index].lower()}"
             return
-        self.cut_line = None
-        self.guide_tip = None
-        self.guide_lower_steps = 0
-        limit = .75 if axis < 2 else .45
-        self.offset[axis] = np.clip(self.offset[axis]+amount, -limit, limit)
+        hand.held = hand.selected = index
+        hand.pinch_finger = finger
+        hand.grip = None
+        hand.offset[:] = self.rest[index][0] - self.grip_point(hand.pose, finger or "index")
+        hand.tool_pose = self.pose_for_tool(hand)
+        self.events.append("pickup")
+        self.message = ""
 
-    def slide_along_cut(self, amount):
+    def move(self, hand, code, amount):
+        axis = MOVES[code][0]
+        self.update_tool_pose(hand)
+        if hand.cut_line is not None and hand.held == 0 and axis != 1:
+            if axis == 0:
+                self.slide_along_cut(hand, amount)
+            else:
+                hand.offset[2] += amount
+            return
+        hand.cut_line = None
+        hand.guide_tip = None
+        hand.guide_lower_steps = 0
+        limit = .75 if axis < 2 else .45
+        hand.offset[axis] = np.clip(hand.offset[axis] + amount, -limit, limit)
+
+    def slide_along_cut(self, hand, amount):
         """Move the blade along the marked line, keeping its depth below the surface."""
-        line, tip = self.cut_line, self.active_tip()
+        line, tip = hand.cut_line, self.active_tip(hand)
         along, _ = line.coords(tip)
         below = (self.tissue.any_height(*tip[:2]) or tip[2]) - tip[2]
         along = float(np.clip(along + amount*.5, -line.half - .003, line.half + .003))
         xy = line.point(along)
         target = np.array([*xy, self.tissue.any_height(*xy) - below])
-        self.offset += target - tip
+        hand.offset += target - tip
 
-    def guided_lowering(self, code):
-        return self.held == 1 and self.guide_tip is not None and code == ord("E")
+    @staticmethod
+    def guided_lowering(hand, code):
+        return hand.held == 1 and hand.guide_tip is not None and code == ord("E")
 
-    def key(self, code, pose):
+    # --- keys ----------------------------------------------------------------------------
+    def key(self, code):
+        if code == SWITCH_HAND:
+            self.active = OTHER[self.active]
+            self.message = f"Keyboard moves the {self.active} hand"
+            return
+        hand = self.hands[self.active]
+        if code == ord("R"):
+            self.reset()
+            return
+        if hand.pose is None:
+            return
         if code in MOVES:
-            amount = MOVES[code][1]
-            if self.guided_lowering(code):
+            if self.guided_lowering(hand, code):
                 # Guided needle lowering stays in discrete taps.
-                if self.guide_lower_steps:
-                    self.guide_tip[2] += amount
-                    self.guide_lower_steps -= 1
+                if hand.guide_lower_steps:
+                    hand.guide_tip[2] += MOVES[code][1]
+                    hand.guide_lower_steps -= 1
             else:
-                self.move(code, amount, pose)
+                self.move(hand, code, MOVES[code][1])
         elif ord("1") <= code <= ord("4"):
-            self.selected = code - ord("1")
-            self.message = f"G (pick up {TOOL_NAMES[self.selected]})"
+            hand.selected = code - ord("1")
+            self.message = f"{hand.label} hand: G (pick up {TOOL_NAMES[hand.selected].lower()})"
         elif code == ord("G"):
-            if self.held is not None:
-                self.update_tool_pose(pose)
-                self.park()
+            if hand.held is not None:
+                self.update_tool_pose(hand)
+                self.park(hand)
             else:
-                self.pick_up(self.selected, pose)
-        elif code in (ord("F"), ord("T"), ord("X")):
-            self.update_tool_pose(pose)
-            self.stitch(code)
+                self.pick_up(hand, hand.selected)
+        elif code == ord("F"):
+            self.update_tool_pose(hand)
+            self.act(hand)
+        elif code == ord("T"):
+            self.throw(hand)
+        elif code == ord("X"):
+            self.update_tool_pose(hand)
+            self.trim(hand)
         elif code == ord("N"):
-            if self.procedure is not None and self.held is not None:
-                self.tool_pose = self.pose_for_tool(pose)
-                if self.procedure.align(self):
-                    return
-            if self.held == 2:
-                self.tool_pose = self.pose_for_tool(pose)
-                target = self.tissue.point(self.site.point(*self.site.forceps_target), .003)
-                self.offset += target - self.active_tip()
-                self.message = "F (grip or release the wound edge)"
-                return
-            if self.held == 3 and self.stitches:
-                self.tool_pose = self.pose_for_tool(pose)
-                self.offset += self.stitches[-1][1] + np.array([0., 0., .008]) - self.active_tip()
-                self.message = "X (trim last knot)"
-                return
-            if self.held != 1:
-                self.message = "G set down, then 2 + G: needle holder"
-                return
-            if self.exit is not None:
-                return
-            if self.entry is None:
-                along = self.site.slot(len(self.stitches) % self.site.stitch_slots)
-                side = -self.site.bite_guide
-            else:
-                along, entry_side = self.site.coords(self.entry)
-                side = -self.site.bite_guide*np.sign(entry_side)
-            surface = self.tissue.point(self.site.point(along, side))
-            self.guide_tip = surface + np.array([0., 0., .004])
-            self.guide_lower_steps = 2
+            self.update_tool_pose(hand)
+            self.align(hand)
         elif code == ord("C"):
-            if self.held is not None:
-                self.tool_pose = self.pose_for_tool(pose)
-            self.park()
-            self.offset.fill(0)
-        elif code == ord("R"):
-            self.marks.clear()
-            self.stitches.clear()
-            self.entry = self.exit = self.previous_tip = self.tissue_grip = None
-            self.guide_tip = None
-            self.guide_lower_steps = 0
-            self.blood.clear()
-            self.cut_line = None
-            if self.procedure is not None:
-                self.procedure = BypassProcedure(self.tissue)
-            self.message = "G (pick up selected tool or set it down)"
+            self.park(hand)
+            hand.offset.fill(0)
 
-    def stitch(self, action):
-        if self.held == 2 and action == ord("F"):
-            if self.tissue_grip is not None:
-                self.tissue_grip = None
-                self.message = "F (grip practice edge)"
-                return
-            tip = self.active_tip()
-            surface = self.tissue.height(*tip[:2])
-            along, side = self.site.coords(tip)
-            if (surface is not None and abs(tip[2] - surface) <= .009
-                    and abs(side) <= self.site.grip_side and abs(along) <= self.site.grip_along):
-                self.tissue_grip = np.array([*tip[:2], surface])
-                self.message = "Q (lift edge) / F (release)"
-            else:
-                self.message = "N (align forceps with the wound edge)"
-            return
-
-        if action == ord("X"):
-            if self.held != 3 or not self.stitches:
-                self.message = "4 then G (pick up scissors after tying)"
-                return
-            tip = self.active_tip()
-            entry, exit, trimmed = self.stitches[-1]
-            if np.linalg.norm(tip - exit) > .035:
-                self.message = "N (align scissors) / X (trim thread)"
-                return
-            self.stitches[-1] = (entry, exit, True)
-            self.events.append("trim")
-            self.message = "G (set down scissors; thread trimmed)"
-            return
-
-        if self.held != 1:
-            self.message = "G set down, then 2 + G: needle holder"
-            return
+    def reset(self):
+        self.marks.clear()
+        self.stitches.clear()
+        self.blood.clear()
+        self.entry = self.exit = self.needle_grasp = None
+        self.pulled, self.throws = False, 0
+        for hand in self.hands.values():
+            hand.previous_tip = hand.grip = hand.guide_tip = hand.cut_line = None
+            hand.guide_lower_steps = 0
         if self.procedure is not None:
-            if action == ord("T") and self.procedure.tie(self):
-                return
-            if action == ord("F"):
-                if self.guide_tip is not None and self.guide_lower_steps:
-                    return
-                if self.procedure.puncture(self, self.active_tip()):
-                    return
-        if action == ord("T"):
-            if self.exit is None:
-                self.message = "Pass the needle through both sides first"
-                return
-            if len(self.stitches) >= 48:
-                self.message = "Repair full - press R to reset"
-                return
-            self.stitches.append((self.entry, self.exit, False))
-            self.events.append("tie")
-            self.entry = self.exit = None
-            self.guide_tip = None
-            return
+            self.procedure = BypassProcedure(self.tissue)
+        self.message = "Repair cleared"
 
+    # --- targets ------------------------------------------------------------------------
+    def cutting_step(self):
+        """True when the step is a cut: a bypass cut, or a free cut with the scalpel held."""
+        if self.procedure is not None:
+            return self.procedure.cutting()
+        return self.holder(0) is not None
+
+    def needle_target(self):
+        """Surface point of the next needle pass (guided placement), or None."""
+        if self.procedure is not None:
+            return self.procedure.needle_target(self)
         if self.exit is not None:
-            self.message = "Press T to tighten and tie"
+            return None
+        site = self.site
+        if self.entry is None:
+            along = site.slot(len(self.stitches) % site.stitch_slots)
+            side = -site.bite_guide
+        else:
+            along, entry_side = site.coords(self.entry)
+            side = -site.bite_guide*np.sign(entry_side)
+        return self.tissue.point(site.point(along, side))
+
+    def edge_point(self, target):
+        """Where the forceps hold the edge for a needle pass at `target`."""
+        if self.procedure is not None:
+            return self.procedure.edge_point(target)
+        along, side = self.site.coords(target)
+        return self.tissue.point(self.site.point(along, side*.45))
+
+    def steady_point(self, hand):
+        """Where `hand` steadies the tissue for the other hand's blade."""
+        if self.procedure is not None and self.procedure.cutting():
+            return self.procedure.steady_point()
+        blade = self.holder(0)
+        if blade is not None and blade is not hand and blade.tool_pose is not None:
+            tip = self.active_tip(blade)
+            reach = min(.025, self.steady_reach*.5)
+            for sign in (-1, 1):
+                point = self.surface(tip[:2] + self.site.across*reach*sign)
+                if point is not None:
+                    return point
+        return self.surface(self.site.point(0, -self.site.bite_guide*2))
+
+    def edge_held(self, forceps, target):
+        """True if `forceps` hold the edge for the needle pass at `target` (taken for this pass)."""
+        if forceps is None or forceps.held != 2 or forceps.grip is None or target is None:
+            return False
+        if forceps.grip_pass != self.passes:
+            return False
+        if np.linalg.norm(forceps.grip[:2] - target[:2]) > self.edge_reach:
+            return False
+        if self.procedure is None:
+            return self.site.coords(forceps.grip)[1]*self.site.coords(target)[1] > 0
+        return True
+
+    def steadied(self, blade):
+        """True if the other hand steadies the tissue where `blade` cuts. In a bypass the
+        forceps must hold the vessel wall beside the marked line."""
+        other = self.other(blade)
+        if other.grip is None:
+            return False
+        if self.procedure is not None and self.procedure.cutting():
+            return (other.held == 2 and
+                    np.linalg.norm(other.grip[:2] - self.procedure.steady_point()[:2]) <= .004)
+        if blade.tool_pose is None:
+            return False
+        tip = self.active_tip(blade)
+        return np.linalg.norm(other.grip[:2] - tip[:2]) <= self.steady_reach
+
+    # --- actions -----------------------------------------------------------------------
+    def align(self, hand):
+        """N: put the hand's tool (or fingertips) where the next step needs it."""
+        if hand.held is None:
+            target = self.steady_point(hand)
+            if target is None:
+                return
+            hand.grip = None
+            hand.offset += target + UP*.006 - self.fingertip(hand)
+            self.message = ""
             return
-        if self.guide_tip is not None and self.guide_lower_steps:
+        if hand.held == 0:
+            if self.procedure is not None and self.procedure.align_blade(self, hand):
+                return
+            self.message = "Arrows move, E lowers the blade"
             return
-        tip = self.active_tip()
+        if hand.held == 3:
+            if self.stitches:
+                hand.offset += self.stitches[-1][1] + UP*.008 - self.active_tip(hand)
+                self.message = ""
+            return
+        if hand.held == 2:
+            hand.grip = None
+            self.message = ""
+            if self.exit is not None and self.needle_grasp is None:
+                target = self.exit + UP*.003
+            elif self.needle_grasp is not None:
+                return
+            elif self.cutting_step():
+                target = self.steady_point(hand)
+            else:
+                needle = self.needle_target()
+                target = None if needle is None else self.edge_point(needle)
+            if target is None:
+                target = self.tissue.point(self.site.point(*self.site.forceps_target))
+            if target is not None:
+                hand.offset += target + UP*.003 - self.active_tip(hand)
+            return
+        # Needle holder: guided placement above the next pass, lowered with E E.
+        if self.exit is not None:
+            return
+        target = self.needle_target()
+        if target is None:
+            self.message = "The needle is not needed in this step"
+            return
+        hand.guide_tip = target + UP*.004
+        hand.guide_lower_steps = 2
+        self.message = ""
+
+    def act(self, hand):
+        """F: forceps or fingers grip / release; the needle holder passes the needle."""
+        if hand.held == 1:
+            self.puncture(hand)
+            return
+        if hand.held not in (None, 2):
+            self.message = "F works with the needle holder, forceps or an empty hand"
+            return
+        tip = self.contact(hand)
+        if (hand.held == 2 and self.exit is not None and self.needle_grasp is None
+                and np.linalg.norm(tip - self.exit) <= .009):
+            hand.grip = None
+            self.needle_grasp = tip[2]
+            self.events.append("pickup")
+            self.message = ""
+            return
+        if hand.grip is not None:
+            hand.grip = None
+            self.message = "Released"
+            return
+        surface = self.surface_height(*tip[:2])
+        reach = .009 if hand.held == 2 else .015
+        if surface is None or abs(tip[2] - surface) > reach:
+            self.message = "Lower onto the tissue first (E), then F"
+            return
+        hand.grip = np.array([*tip[:2], surface])
+        hand.grip_pass = self.passes
+        self.message = ""
+
+    def puncture(self, hand):
+        if self.exit is not None:
+            self.message = "Forceps: take the needle and pull the suture through"
+            return
+        if hand.guide_tip is not None and hand.guide_lower_steps:
+            return
+        tip = self.active_tip(hand)
+        if self.procedure is not None:
+            target = self.procedure.needle_target(self)
+            if target is None:
+                self.message = "Not a suturing step"
+                return
+            point = self.procedure.puncture_point(target, tip)
+            if point is None:
+                self.message = "N to align on the next target, then E E and F"
+                return
+        else:
+            point = self.site_puncture(tip)
+            if point is None:
+                return
+        forceps = self.holder(2)
+        if not self.edge_held(forceps, point):
+            label = OTHER[hand.side].capitalize() if forceps is None else forceps.label
+            self.message = f"{label} hand: lift this edge with the forceps first (N, F)"
+            return
+        if self.entry is None:
+            self.entry = point
+            hand.guide_tip = None
+        else:
+            self.exit = point
+        self.passes += 1
+        self.message = ""
+        self.bleed(point, .0008 if self.procedure is not None else .0011)
+        self.events.append("puncture")
+
+    def site_puncture(self, tip):
+        """Free needle placement on the skin or heart laceration: the point, or None."""
         if self.tissue.on_vessel(*tip[:2]):
             self.message = "Keep the needle off the coronary vessels"
-            return
+            return None
         surface = self.tissue.height(*tip[:2])
         if surface is None or not surface - .012 <= tip[2] <= surface + .001:
             self.message = f"Lower the needle tip to the {self.site.noun}"
-            return
+            return None
         point = self.tissue.point(tip[:2], .0015)
         along, side = self.site.coords(point)
         site = self.site
         if not (site.bite_min <= abs(side) <= site.bite_max and abs(along) <= site.along_limit):
             self.message = (f"Place the needle {site.bite_min*1000:.0f}-{site.bite_max*1000:.0f} mm "
                             "beside the wound")
-            return
-        if self.entry is None:
-            self.entry = point
-            self.guide_tip = None
-            self.bleed(point, .0011)
-            self.events.append("puncture")
-            return
-        entry_along, entry_side = self.site.coords(self.entry)
-        if side*entry_side < 0 and abs(along - entry_along) <= site.exit_tolerance:
-            self.exit = point
-            self.bleed(point, .0011)
-            self.events.append("puncture")
-            self.message = "Press T to tighten and tie"
-        else:
-            self.message = "Exit must be straight across the entry"
+            return None
+        if self.entry is not None:
+            entry_along, entry_side = site.coords(self.entry)
+            if not (side*entry_side < 0 and abs(along - entry_along) <= site.exit_tolerance):
+                self.message = "Exit must be straight across the entry"
+                return None
+        return point
 
-    def cut(self, tip):
-        self.depth = 0.0
+    def check_pull(self):
+        """The forceps holding the needle pull the suture through as they rise."""
+        if self.needle_grasp is None or self.pulled:
+            return
+        forceps = self.holder(2)
+        if forceps is None or forceps.tool_pose is None:
+            return
+        if self.active_tip(forceps)[2] - self.needle_grasp >= PULL_HEIGHT:
+            self.pulled = True
+            self.message = ""
+            self.events.append("trim")
+
+    def throw(self, hand):
+        """T: one throw of an instrument tie; the third completes the knot."""
+        if hand.held != 1:
+            self.message = "Tie with the needle holder (T)"
+            return
+        if self.exit is None:
+            self.message = "Pass the needle through both edges first"
+            return
+        if not self.pulled:
+            self.message = "Forceps: grasp the needle (N, F) and pull it through (Q)"
+            return
+        if len(self.stitches) >= 48:
+            self.message = "Repair full - press R to reset"
+            return
+        self.throws += 1
+        self.message = ""
+        self.events.append("tie")
+        if self.throws < len(THROWS):
+            return
+        self.stitches.append((self.entry, self.exit, False))
+        self.entry = self.exit = self.needle_grasp = hand.guide_tip = None
+        self.pulled, self.throws = False, 0
+        forceps = self.holder(2)
+        if forceps is not None:
+            forceps.grip = None
+        if self.procedure is not None:
+            self.procedure.stitch_tied(self)
+
+    def trim(self, hand):
+        if hand.held != 3 or not self.stitches:
+            self.message = "4 then G (pick up scissors after tying)"
+            return
+        entry, exit, trimmed = self.stitches[-1]
+        if np.linalg.norm(self.active_tip(hand) - exit) > .035:
+            self.message = "N (align scissors) / X (trim thread)"
+            return
+        self.stitches[-1] = (entry, exit, True)
+        self.events.append("trim")
+        self.message = "Thread trimmed"
+
+    # --- guidance ----------------------------------------------------------------------
+    def plan(self):
+        """(hand side, prompt) for the next step of the technique."""
+        def take(hand, index):
+            name = TOOL_NAMES[index].lower()
+            if hand.held is not None:
+                return f"G set down the {hand.tool}, then {index + 1} + G ({name})"
+            return f"{index + 1} then G ({name})"
+
+        right = self.hands["right"]
+        head = "" if self.procedure is None else self.procedure.head()
+        if self.procedure is not None and self.procedure.done:
+            return None, self.procedure.prompt_done()
+
+        if self.cutting_step():
+            blade = self.holder(0) or right
+            steady = self.other(blade)
+            if blade.held != 0:
+                return blade.side, head + take(blade, 0)
+            if self.procedure is not None:
+                if steady.held != 2:
+                    return steady.side, head + take(steady, 2)
+                if not self.steadied(blade):
+                    return steady.side, head + "N then F (forceps hold the vessel wall)"
+                if blade.cut_line is None:
+                    return blade.side, head + "N (put the blade on the marked line)"
+                if blade.depth <= 0:
+                    return blade.side, head + "E (lower the blade into the vessel)"
+                return blade.side, head + (f"left / right arrows cut along the line "
+                                           f"({self.procedure.covered.mean():.0%})")
+            if steady.held not in (None, 2):
+                return steady.side, f"G set down the {steady.tool} (that hand steadies the tissue)"
+            if steady.grip is None:
+                what = "forceps hold" if steady.held == 2 else "fingers stretch"
+                return steady.side, f"N then F ({what} the tissue beside the blade)"
+            if not self.steadied(blade):
+                return blade.side, f"Arrows: bring the blade next to the {steady.side} hand"
+            return blade.side, "E lowers the blade, arrows cut (keep the tissue steady)"
+
+        scissors = self.holder(3)
+        if scissors is not None and self.exit is None:
+            return scissors.side, "N (align scissors) / X (trim last knot)"
+        needle = self.holder(1) or right
+        forceps = self.holder(2) or self.other(needle)
+        if needle.held != 1:
+            return needle.side, head + take(needle, 1)
+        if forceps.held != 2:
+            return forceps.side, head + take(forceps, 2)
+        if self.procedure is not None:
+            n = f"stitch {self.procedure.tied + 1}/{STITCHES_PER_ANASTOMOSIS}"
+            edge = "graft" if self.entry is None else "artery"
+        else:
+            n = f"stitch {len(self.stitches) + 1}"
+            edge = "first edge" if self.entry is None else "opposite edge"
+        if self.exit is None:
+            if not self.edge_held(forceps, self.needle_target()):
+                return forceps.side, head + f"N then F (forceps lift the {edge}, {n})"
+            if needle.guide_tip is None:
+                return needle.side, head + f"N (align the needle on the {edge})"
+            if needle.guide_lower_steps:
+                return needle.side, head + f"{needle.guide_lower_steps}x E (lower the needle)"
+            return needle.side, head + f"F (pass the needle through the {edge})"
+        if self.needle_grasp is None:
+            return forceps.side, head + "N then F (forceps grasp the needle tip)"
+        if not self.pulled:
+            pulled = 0
+            if forceps.tool_pose is not None:
+                pulled = (self.active_tip(forceps)[2] - self.needle_grasp) / PULL_HEIGHT
+            return forceps.side, head + f"Q (pull the suture through, {min(max(pulled, 0), 1):.0%})"
+        return needle.side, head + f"T (instrument tie, throw {self.throws + 1}/3: {THROWS[self.throws]})"
+
+    def action_prompt(self):
+        if self._message and time.monotonic() - self._message_at < 2.5:
+            return self._message
+        side, text = self.plan()
+        return text if side is None else f"{side.capitalize()} hand: {text}"
+
+    # --- cutting -------------------------------------------------------------------------
+    def cut(self, hand, tip):
+        hand.depth = 0.0
         if tip is None:
-            self.previous_tip = None
+            hand.previous_tip = None
             return
         surface = self.tissue.height(*tip[:2])
         on_line = self.procedure is not None and self.procedure.cut_allowed(tip)
         if on_line:
             surface = self.tissue.any_height(*tip[:2])
         if surface is None or tip[2] > surface:
-            if self.held == 0 and self.tissue.on_vessel(*tip[:2]):
+            if self.tissue.on_vessel(*tip[:2]):
                 vessel_top = self.tissue.vessel_top(*tip[:2])
                 if tip[2] <= vessel_top:
                     self.message = "Blade on a vessel! Lift (Q), move away"
-            self.previous_tip = None
+            hand.previous_tip = None
             return
-        self.depth = min(MAX_DEPTH, surface - tip[2])
+        if not self.steadied(hand):
+            self.message = f"Steady the tissue first: {OTHER[hand.side]} hand N then F"
+            hand.previous_tip = None
+            return
+        hand.depth = min(MAX_DEPTH, surface - tip[2])
         normal = self.tissue.any_normal(*tip[:2]) if on_line else self.tissue.normal(*tip[:2])
         point = np.array([*tip[:2], surface]) + normal*.0007
-        if self.previous_tip is not None:
-            distance = np.linalg.norm(point-self.previous_tip)
+        if hand.previous_tip is not None:
+            distance = np.linalg.norm(point - hand.previous_tip)
             if .0012 <= distance <= .025:
-                self.marks.append(self.wound_segment(self.previous_tip, point, self.depth, normal))
+                self.marks.append(self.wound_segment(hand.previous_tip, point, hand.depth, normal))
                 if on_line:
                     self.procedure.on_cut(self, point)
                 # Deeper cuts ooze: drops appear along the wound and slowly spread.
-                if self.depth > .0012 and np.random.random() < .18 + 40*self.depth:
-                    along = (point - self.previous_tip) / distance
+                if hand.depth > .0012 and np.random.random() < .18 + 40*hand.depth:
+                    along = (point - hand.previous_tip) / distance
                     beside = np.cross(along, normal)*np.random.uniform(-.0015, .0015)
-                    self.bleed(point + beside, np.random.uniform(.0014, .0018) + .35*self.depth)
+                    self.bleed(point + beside, np.random.uniform(.0014, .0018) + .35*hand.depth)
             elif distance < .0012:
                 return
-        self.previous_tip = point
+        hand.previous_tip = point
 
     def wound_segment(self, start, end, depth, normal):
         """Flat ellipses lying on the tissue surface for one cut segment: everted edges
@@ -752,15 +1164,19 @@ class CuttingStation:
         _, _, matrix, _ = surface_strip(surface, surface, 0, 0, normal, "blood")
         self.blood.append((surface, matrix, self.clock, radius))
 
+    # --- drawing -------------------------------------------------------------------------
     def draw(self, scene, now=None):
         if now is not None:
             self.clock = now
         for index, pose in enumerate(self.rest):
-            draw_instrument(scene, index, *(self.tool_pose if index == self.held else pose))
-        if self.tissue_grip is not None and self.held == 2:
-            tip = self.active_tip()
-            displacement = np.clip(tip - self.tissue_grip, -.024, .024)
-            draw_capsule(scene, self.tissue_grip, self.tissue_grip + displacement, .003, "lip")
+            hand = self.holder(index)
+            draw_instrument(scene, index, *(hand.tool_pose if hand is not None else pose))
+        lift = min(.024, self.site.bite_guide*1.2)
+        forceps = self.holder(2)
+        if forceps is not None and forceps.grip is not None:
+            displacement = np.clip(self.active_tip(forceps) - forceps.grip, -lift, lift)
+            draw_capsule(scene, forceps.grip, forceps.grip + displacement,
+                         min(.003, self.site.bite_guide*.25), "lip")
         ellipse = mj.mjtGeom.mjGEOM_ELLIPSOID
         for size, pos, matrix, material in self.tissue.wound:
             draw_geom(scene, ellipse, size, pos, matrix, material)
@@ -775,22 +1191,33 @@ class CuttingStation:
             draw_geom(scene, ellipse, [r, r*.9, r*.28], position, matrix, "blood")
         for entry, exit, trimmed in self.stitches:
             self.draw_thread(scene, entry, exit, True, trimmed)
-        if self.entry is not None:
-            end = self.exit
-            if end is None and self.held == 1:
-                end = self.active_tip()
-            if end is not None:
-                self.draw_thread(scene, self.entry, end, False, False)
+        if self.entry is None:
+            return
+        if self.exit is None:
+            holder = self.holder(1)
+            if holder is not None and holder.tool_pose is not None:
+                self.draw_thread(scene, self.entry, self.active_tip(holder), False, False)
+            return
+        self.draw_thread(scene, self.entry, self.exit, self.throws > 0, False, self.throws)
+        if self.needle_grasp is not None and forceps is not None and forceps.tool_pose is not None:
+            # The long end, from the exit up to the forceps holding the needle.
+            tip = self.active_tip(forceps)
+            draw_path(scene, [self.exit, (self.exit + tip)/2 + UP*.002, tip], .0008, "thread")
+            draw_geom(scene, mj.mjtGeom.mjGEOM_SPHERE, [.0012, 0, 0], tip, np.eye(3), "polished")
 
-    def draw_thread(self, scene, entry, exit, tied, trimmed):
-        mid = (entry+exit)/2 + np.array([0., 0., .003 if tied else .013])
-        draw_path(scene, [entry, (entry+mid)/2, mid, (mid+exit)/2, exit], .0008, "thread")
+    def draw_thread(self, scene, entry, exit, tied, trimmed, throws=3):
+        mid = (entry + exit)/2 + np.array([0., 0., .003 if tied else .013])
+        draw_path(scene, [entry, (entry + mid)/2, mid, (mid + exit)/2, exit], .0008, "thread")
         if tied:
             knot = exit + np.array([0., 0., .001])
-            draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [.0019, .0014, .0012], knot, np.eye(3), "thread")
-            length = self.site.tail_length*(.3 if trimmed else 1)
-            for spread in (.6, -.2):
-                draw_capsule(scene, knot, knot + np.array([length, length*spread, .0004]), .0006, "thread")
+            grow = .6 + .4*min(throws, 3)/3
+            draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [.0019*grow, .0014*grow, .0012*grow],
+                      knot, np.eye(3), "thread")
+            if throws >= 3:
+                length = self.site.tail_length*(.3 if trimmed else 1)
+                for spread in (.6, -.2):
+                    draw_capsule(scene, knot, knot + np.array([length, length*spread, .0004]),
+                                 .0006, "thread")
 
 
 SWITCH_SITE = ord("P")
@@ -799,11 +1226,11 @@ TOGGLE_GUIDE = ord("K")
 # Shown at the bottom right, matching the status box at the bottom left (five rows each).
 # K or the Key guide button hides it.
 KEY_GUIDE = (
-    ("KEYS  Tools", "1 scalpel 2 needle 3 forceps 4 scissors"),
-    ("Hand", "G take / drop   arrows move   Q/E up/down"),
-    ("Suture", "N align   F puncture   T tie   X trim"),
-    ("Reset", "R clear cuts   0 view   H re-aim glove"),
-    ("More", "P next site   M sound   K hide keys"),
+    ("KEYS  Hands", "Z other hand (follows steps)   G take / drop"),
+    ("Tools", "1 scalpel 2 needle 3 forceps 4 scissors"),
+    ("Move", "arrows move   Q/E up/down   N align"),
+    ("Act", "F grip / pass needle   T throw   X trim"),
+    ("More", "R clear  0 view  H re-aim  P site  M sound  K keys"),
 )
 
 # MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
@@ -831,14 +1258,44 @@ def undo_viewer_shortcuts(option, key_events, flags, groups):
             option.geomgroup[i] = 1 - groups[i]
 
 
-def draw_user(scene, points, station, now):
-    """Everything that moves: glove, instruments, wounds, sutures and the patient monitor."""
-    draw_hand(scene, points)
+def draw_user(scene, hands, station, now):
+    """Everything that moves: gloves, instruments, wounds, sutures and the patient monitor."""
+    scene.ngeom = 0
+    for side, points in hands.items():
+        draw_hand(scene, points, side == station.active)
     station.draw(scene, now)
     draw_monitor(scene, now)
 
 
-def display(frames, preview, site):
+def glove_poses(gloves, hands, preview, now, reset_heading):
+    """side -> scene joints, and a status line. A glove that is not streaming leaves a
+    keyboard-driven hand in its place."""
+    poses, live, waiting = {}, [], []
+    for side, hand in hands.items():
+        sample = None if preview else gloves.latest.get(side)
+        if reset_heading:
+            hand.heading.reset()
+        pose = None
+        if sample is not None and now - sample[0] <= .5:
+            pose = world_pose(sample[1], hand.heading, now, HAND_ANCHOR[side])
+            live.append(side)
+            if not hand.heading.locked:
+                waiting.append(side)
+        poses[side] = pose if pose is not None else preview_pose(-1.2, side)
+    if preview:
+        status = "Keyboard practice"
+    elif not live:
+        status = "Waiting for the gloves (keyboard hands)"
+    elif waiting:
+        status = f"Rest {' and '.join(waiting)} hand flat, fingers to the screen"
+    elif len(live) == 1:
+        status = f"{live[0].capitalize()} glove live, {OTHER[live[0]]} by keyboard"
+    else:
+        status = "Both gloves live"
+    return poses, status
+
+
+def display(gloves, preview, site):
     model = build_model()
     Look.model = model
     data = mj.MjData(model)
@@ -846,19 +1303,20 @@ def display(frames, preview, site):
     switch = SiteSwitch(model, data, site.name)
     clear_button = PanelButton(model, data, CLEAR_BUTTON)
     guide_id = model.equality(GUIDE_BUTTON).id
-    heading = Heading()
     last_status = None
     keys = SimpleQueue()
     station = CuttingStation(make_tissue(model, data, site))
     held_keys = HeldKeys()
     sounds = Sounds()
     last_frame = time.monotonic()
-    print("1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
+    print("Two hands: the keyboard moves the hand the next step needs (green cuff); Z swaps it.\n"
+          "1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
           "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
-          "N aligns tools, F punctures or grips tissue, T ties, X trims. R clears the repair.\n"
+          "N aligns the tool, F grips (forceps/fingers) or passes the needle, T throws a knot,\n"
+          "X trims. R clears the repair.\n"
           "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan,\n"
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
-          "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
+          "H re-aims the gloves: press H, then rest your hands flat with fingers toward the screen.\n"
           "M mutes or unmutes the OR sounds.\n"
           "Switch site: Skin / Heart / Bypass buttons in the Equality panel on the right, or press P.\n"
           "Clear repair (same panel) removes all cuts, blood and stitches and puts the tools back.",
@@ -900,13 +1358,13 @@ def display(frames, preview, site):
                     switch.select(choice)
             pressed = [code for code in pressed if code not in (SWITCH_SITE, TOGGLE_GUIDE)]
             if clear and (choice is None or choice == station.site.name):
-                station.park()
+                station.park_all()
                 station = CuttingStation(make_tissue(model, data, site))
                 sounds.play("setdown")
                 print("Repair cleared", flush=True)
             if choice is not None and choice != station.site.name:
                 site = SITES[choice]
-                station.park()
+                station.park_all()
                 station = CuttingStation(make_tissue(model, data, site))
                 with viewer.lock():
                     show_site(model, viewer.opt, site)
@@ -930,22 +1388,12 @@ def display(frames, preview, site):
                             factor = .8 if code in ZOOM_IN else 1.25
                             viewer.cam.distance = float(np.clip(viewer.cam.distance*factor, .03, 6))
 
-            sample = frames.latest
-            if preview:
-                status, points = "Keyboard practice", preview_pose(-1.2)
-            elif sample is None or now - sample[0] > .5:
-                status, points = "Waiting for the Rokoko hand stream", None
-            else:
-                if ord("H") in pressed:
-                    heading.reset()
-                    pressed = [key for key in pressed if key != ord("H")]
-                points = world_pose(sample[1], heading, now)
-                status = ("Rokoko live" if heading.locked
-                          else "Rest hand flat, fingers to the screen")
-
-            points = station.update(points, pressed, held)
+            reset_heading = ord("H") in pressed
+            pressed = [key for key in pressed if key != ord("H")]
+            poses, status = glove_poses(gloves, station.hands, preview, now, reset_heading)
+            drawn = station.update(poses, pressed, held)
             with viewer.lock():
-                draw_user(viewer.user_scn, points, station, now)
+                draw_user(viewer.user_scn, drawn, station, now)
             for event in station.events:
                 sounds.play(event)
             station.events.clear()
@@ -955,10 +1403,11 @@ def display(frames, preview, site):
                 print(status, flush=True)
                 last_status = status
             if overlay is not None and now >= next_overlay:
-                tool_status = (TOOL_NAMES[station.selected] + " selected"
-                               if station.held is None else TOOL_NAMES[station.held] + " held")
+                left, right = station.hands["left"], station.hands["right"]
+                tool_status = (f"L {left.tool}   R {right.tool}   "
+                               f"(keys: {station.active}, Z)")
                 texts = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
-                          "SURGICAL TRAINING\nSite\nInstrument\nStitches / depth\nAction",
+                          "SURGICAL TRAINING\nSite\nHands\nStitches / depth\nAction",
                           f"{status}\n{station.site.name.capitalize()}  (P or Equality panel)\n{tool_status}\n{len(station.stitches)} / "
                           f"{station.depth*1000:.1f} mm\n{station.action_prompt()}")]
                 if show_guide:
@@ -973,38 +1422,21 @@ def display(frames, preview, site):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preview", action="store_true", help="Practice cutting with the keyboard and no glove")
+    parser.add_argument("--preview", action="store_true",
+                        help="Practice with keyboard hands and no gloves")
     parser.add_argument("--site", choices=sorted(SITES), default="skin",
-                        help="What to operate on: the skin pad (default) or the heart")
+                        help="What to operate on: the skin pad (default), the heart, or a bypass")
     args = parser.parse_args()
     site = SITES[args.site]
     print(f"Operating site: {site.name}", flush=True)
-    frames = Frames()
-    if args.preview:
-        display(frames, True, site)
-        return
-    stream_script = SDK / "rgmp_stream.py"
-    if not stream_script.is_file():
-        parser.error(f"Missing Rokoko SDK example: {stream_script}")
-    print("Connect only the left glove. Tilt and roll follow your hand directly; to set the\n"
-          "direction, rest your hand flat with fingers toward the screen for half a second.\n"
-          "Press H any time to set the direction again.", flush=True)
-    with subprocess.Popen(
-        [sys.executable, "-u", str(stream_script), "--port", "12277",
-         "--group-name", "joints_openxr", "--measure-type", "TRANSFORM"],
-        stdout=subprocess.PIPE, text=True,
-    ) as process:
-        threading.Thread(target=frames.read, args=(process.stdout,), daemon=True).start()
-        try:
-            display(frames, False, site)
-        finally:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+    gloves = GloveStream()
+    if not args.preview:
+        print("Connect both gloves (rokoko-sdk and rkk-hand-solver --emit-openxr). Tilt and roll\n"
+              "follow your hands directly; to set the direction, rest each hand flat with the\n"
+              "fingers toward the screen for half a second. Press H to set it again.\n"
+              "A glove that is not streaming is replaced by a keyboard hand.", flush=True)
+        threading.Thread(target=gloves.run, daemon=True).start()
+    display(gloves, args.preview, site)
 
 
 if __name__ == "__main__":

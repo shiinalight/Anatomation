@@ -10,6 +10,11 @@ The marked lines were placed by ray-casting the heart model in the scene: the co
 lies on the straight arm of the visible coronary artery on the anterior surface, and the
 aortotomy on the top ridge of the ascending aorta. All heights come from the meshes at
 run time (`HeartTissue.any_point`), so the targets sit exactly on the vessel surfaces.
+
+Both hands work as in theatre (see CuttingStation in surgical_suturing_guided.py): the left
+hand's forceps hold the vessel wall while the right hand cuts, lift each edge before the needle
+passes through it, and take the needle to pull the suture through before the instrument tie.
+This class supplies the targets and the step logic; the station runs the hands.
 """
 
 import numpy as np
@@ -23,6 +28,8 @@ COVERAGE_NEEDED = .85          # fraction of the marked line that must be cut
 CUT_WIDTH = .003               # the blade must stay this close to the marked line
 PUNCTURE_REACH = .003          # how close (horizontally) a needle puncture must be to its target
 GRAFT_RADIUS = .0028
+STEADY_SIDE = .0035           # forceps hold the vessel wall this far beside the cut line
+EDGE_OFFSET = .0015           # forceps hold an edge this far outside the needle target
 
 
 class Incision:
@@ -132,118 +139,89 @@ class BypassProcedure:
         self.step += 1
         self.covered[:] = False
         self.tied = 0
-        station.cut_line = None
+        for hand in station.hands.values():
+            hand.cut_line = None
         if self.done:
             self.finished_at = station.clock
             station.events.append("complete")
         else:
             station.events.append("switch")
 
+    def head(self):
+        if self.done:
+            return ""
+        return f"Step {self.step + 1}/4 {STEPS[self.step][2].lower()}: "
+
+    def cutting(self):
+        step = self.current()
+        return step is not None and step[0] == "cut"
+
+    def suturing(self):
+        step = self.current()
+        return step is not None and step[0] == "suture"
+
     def cut_allowed(self, xy):
         """True where the blade may open a vessel: on the marked line of a cut step."""
-        step = self.current()
-        if step is None or step[0] != "cut":
+        if not self.cutting():
             return False
-        along, side = step[1].coords(xy)
-        return abs(side) <= CUT_WIDTH and abs(along) <= step[1].half + .003
+        cut = self.current()[1]
+        along, side = cut.coords(xy)
+        return abs(side) <= CUT_WIDTH and abs(along) <= cut.half + .003
 
     def on_cut(self, station, point):
-        step = self.current()
-        if step is None or step[0] != "cut" or not self.cut_allowed(point):
+        if not self.cut_allowed(point):
             return
-        cut = step[1]
+        cut = self.current()[1]
         along, _ = cut.coords(point)
         samples = np.linspace(-cut.half, cut.half, self.samples)
         self.covered |= np.abs(samples - along) <= .0016
         if self.covered.mean() >= COVERAGE_NEEDED:
             self._advance(station)
 
-    # --- tools -----------------------------------------------------------------------
-    def align(self, station):
-        """N key. Returns True when the procedure positioned the held tool."""
-        step = self.current()
-        if step is None:
-            return False
-        kind, cut, _ = step
-        if station.held == 0 and kind == "cut":
-            start = self._surface(cut.point(-cut.half - .001))
-            station.offset += start + UP*.003 - station.active_tip()
-            station.cut_line = cut
-            return True
-        if station.held == 1 and kind == "suture":
-            if station.exit is not None:
-                return True
-            entry, exit_ = self.rings[cut.name][self.tied]
-            target = entry if station.entry is None else exit_
-            station.guide_tip = target + UP*.004
-            station.guide_lower_steps = 2
-            return True
-        return False
+    # --- targets for the two hands ---------------------------------------------------
+    def steady_point(self):
+        """Where the non-cutting hand holds the vessel wall: beside the middle of the line."""
+        cut = self.current()[1]
+        return self._surface(cut.point(0, STEADY_SIDE))
 
-    def puncture(self, station, tip):
-        """F key with the needle holder during a suture step. Returns True if handled."""
-        step = self.current()
-        if step is None or step[0] != "suture":
+    def align_blade(self, station, hand):
+        """N with the scalpel during a cut step: blade just above the start of the line."""
+        if not self.cutting():
             return False
-        if station.exit is not None:
-            station.message = "T (tie this stitch)"
-            return True
-        entry, exit_ = self.rings[step[1].name][self.tied]
-        target = entry if station.entry is None else exit_
-        close = np.linalg.norm(tip[:2] - target[:2]) <= PUNCTURE_REACH
-        depth_ok = target[2] - .012 <= tip[2] <= target[2] + .001
-        if not (close and depth_ok):
-            station.message = "N to align on the next target, then E E and F"
-            return True
-        if station.entry is None:
-            station.entry = entry
-        else:
-            station.exit = exit_
-        station.bleed(target, .0008)
-        station.events.append("puncture")
+        cut = self.current()[1]
+        start = self._surface(cut.point(-cut.half - .001))
+        hand.offset += start + UP*.003 - station.active_tip(hand)
+        hand.cut_line = cut
         return True
 
-    def tie(self, station):
-        """T key during a suture step. Returns True if handled."""
-        step = self.current()
-        if step is None or step[0] != "suture":
-            return False
-        if station.exit is None:
-            station.message = "Pass the needle through graft and artery first"
-            return True
-        station.stitches.append((station.entry, station.exit, False))
-        station.entry = station.exit = station.guide_tip = None
-        station.events.append("tie")
+    def needle_target(self, station):
+        """Next needle pass: through the graft first, then the artery."""
+        if not self.suturing():
+            return None
+        entry, exit_ = self.rings[self.current()[1].name][self.tied]
+        return entry if station.entry is None else exit_
+
+    def edge_point(self, target):
+        """Where the forceps hold the edge for a needle pass at `target`: just outside it."""
+        cut = self.current()[1]
+        out = target[:2] - cut.centre
+        out /= max(np.linalg.norm(out), 1e-9)
+        return self._surface(target[:2] + out*EDGE_OFFSET, .0004)
+
+    @staticmethod
+    def puncture_point(target, tip):
+        """`target` if the needle tip is on it, otherwise None."""
+        close = np.linalg.norm(tip[:2] - target[:2]) <= PUNCTURE_REACH
+        depth_ok = target[2] - .012 <= tip[2] <= target[2] + .001
+        return target if close and depth_ok else None
+
+    def stitch_tied(self, station):
         self.tied += 1
         if self.tied >= STITCHES_PER_ANASTOMOSIS:
             self._advance(station)
-        return True
 
-    def prompt(self, station):
-        if self.done:
-            return "Bypass complete: the graft is perfused. R or Clear repair to restart"
-        kind, cut, title = STEPS[self.step]
-        head = f"Step {self.step + 1}/4 {title.lower()}: "
-        if kind == "cut":
-            if station.held != 0:
-                return head + ("G set down, then 1 + G (scalpel)" if station.held is not None
-                               else "1 then G (scalpel)")
-            if station.cut_line is None:
-                return head + "N (put the blade on the marked line)"
-            if station.depth <= 0:
-                return head + "E (lower the blade into the vessel)"
-            return head + f"left / right arrows cut along the line ({self.covered.mean():.0%})"
-        n = f"stitch {self.tied + 1}/{STITCHES_PER_ANASTOMOSIS}"
-        if station.held != 1:
-            return head + ("G set down, then 2 + G (needle holder)" if station.held is not None
-                           else "2 then G (needle holder)")
-        if station.exit is not None:
-            return head + f"T (tie {n})"
-        if station.guide_tip is None:
-            return head + f"N (align {n} on the {'graft' if station.entry is None else 'artery'})"
-        if station.guide_lower_steps:
-            return head + f"{station.guide_lower_steps}x E (lower needle)"
-        return head + f"F (pass {n} through the {'graft' if station.entry is None else 'artery'})"
+    def prompt_done(self):
+        return "Bypass complete: the graft is perfused. R or Clear repair to restart"
 
     # --- drawing ---------------------------------------------------------------------
     def draw(self, scene, clock):

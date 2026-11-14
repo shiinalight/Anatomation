@@ -1,7 +1,7 @@
 # Surgical Training Simulatorr
 
-A MuJoCo hackathon demo with a Rokoko-controlled five-finger hand,
-interactive surgical instruments, and guided suturing.
+A MuJoCo hackathon demo with two Rokoko-controlled hands, interactive surgical
+instruments, and guided two-handed cutting and suturing.
 
 ## Run on macOS
 
@@ -11,7 +11,7 @@ Create and activate a Python virtual environment, then install the dependencies.
     source .venv/bin/activate
     python -m pip install -r requirements.txt
 
-Try it without a glove:
+Try it without gloves (both hands are keyboard-driven):
 
     mjpython surgical_suturing_guided.py --preview
 
@@ -35,19 +35,42 @@ Then launch the simulator from this directory:
 
     mjpython surgical_suturing_guided.py
 
+Connect both gloves. The simulator reads the solver's stream directly (port 12277) and
+tells the hands apart by the side each glove reports. If one glove is not streaming,
+a keyboard-driven hand takes its place, so you can also work with one glove.
+
 ## Controls
 
 | Action | Keys / mouse |
 |---|---|
+| Which hand | The keys act on the hand the next step needs (green band on its cuff); Z swaps to the other hand |
 | Pick an instrument | 1 scalpel, 2 needle holder, 3 forceps, 4 scissors, then G to pick up / set down |
 | Move the hand | Arrows and Q/E (tap for a small step, hold to glide) |
-| Suturing | N aligns the tool, F punctures or grips tissue, T ties, X trims, R clears the pad |
+| Suturing | N aligns the tool, F grips with the forceps (or presses with an empty hand) or passes the needle, T throws a knot, X trims, R clears the pad |
 | Camera | Two-finger scroll to zoom, left-drag to orbit, right-drag to pan, double-right-click a spot to zoom around it, 0 resets the view |
-| Glove | H recalibrates: rest your hand palm-down, fingers toward the monitor, then press H |
+| Gloves | H recalibrates: press H, then rest your hands palm-down, fingers toward the monitor |
 | Sound | M mutes or unmutes the OR sounds (macOS) |
 | Operating site | Skin / Heart / Bypass buttons in the right panel's Equality section, or press P to go to the next one |
 | Key guide | Shown in a bar at the bottom right, next to the status box; K or the Key guide button in the Equality section hides it |
 | Start over | Clear repair button in the same Equality section: removes all cuts, blood and stitches and puts the tools back in the trays (R clears cuts and stitches only) |
+
+## Two-handed technique
+
+The right hand cuts and drives the needle; the left hand works against it, as in theatre.
+The status bar always names the hand and the key for the next step.
+
+- **Cutting**: the left hand steadies the tissue next to the blade (an empty hand stretches
+  the skin, or the forceps hold it). The blade does not open unsteadied tissue.
+- **Each stitch**:
+  1. Left forceps lift the first edge (N, F).
+  2. Right needle holder passes the needle through it (N, E E, F).
+  3. Left forceps lift the opposite edge (N, F).
+  4. Needle through the opposite edge (N, E E, F).
+  5. Left forceps grasp the needle tip (N, F) and pull the suture through (Q Q Q).
+  6. Instrument tie with the needle holder: three throws (T T T): a double wrap, a single
+     wrap the other way, and a single wrap that squares the knot.
+- Each needle pass needs a fresh forceps grip on the edge it goes through. Dropping the
+  forceps before the knot lets the needle slip back.
 
 ## Operating sites
 
@@ -71,10 +94,10 @@ The status bar shows the current step and the next key to press.
 
 | Step | Tool | How |
 |---|---|---|
-| 1. Cut the coronary artery | Scalpel (1, G) | N puts the blade on the white marked line, E lowers it, left / right arrows cut along the line |
-| 2. Suture the graft onto the coronary | Needle holder (2, G) | Six stitches around the opening: N aligns on the green target, E E lowers, F passes through the graft, then N, E E, F through the artery, T ties |
-| 3. Incise the ascending aorta | Scalpel | Same as step 1, on the aorta |
-| 4. Suture the graft onto the aorta | Needle holder | Same as step 2; when the last stitch is tied the graft fills with blood |
+| 1. Cut the coronary artery | Right scalpel, left forceps | Forceps hold the vessel wall beside the white marked line (N, F); N puts the blade on the line, E lowers it, left / right arrows cut along it |
+| 2. Suture the graft onto the coronary | Right needle holder, left forceps | Six stitches around the opening, each as above: forceps lift the graft, needle through the graft (green target), forceps lift the artery, needle through the artery, forceps pull the suture through, T T T |
+| 3. Incise the ascending aorta | Right scalpel, left forceps | Same as step 1, on the aorta |
+| 4. Suture the graft onto the aorta | Right needle holder, left forceps | Same as step 2; when the last stitch is tied the graft fills with blood |
 
 The marked lines were placed by ray-casting the heart model: the coronary cut lies on
 the straight arm of the visible coronary artery, the aortotomy on the top of the
@@ -82,7 +105,8 @@ ascending aorta. Cutting any other vessel still gives a warning.
 
 ## Files
 
-- `surgical_suturing_guided.py`: glove tracking, instruments and the suturing logic.
+- `surgical_suturing_guided.py`: glove tracking (both gloves), instruments and the
+  two-handed cutting and suturing logic.
 - `or_scene.py`: the operating room (layout, heart model import, heart-surface queries,
   generated textures, lighting, patient monitor, sounds).
 - `bypass.py`: the guided coronary bypass procedure (targets, steps, graft).
