@@ -394,7 +394,7 @@ class CuttingStation:
         self.guide_lower_steps = 0
         self.previous_tip = None
         self.depth = 0.0
-        self.message = "2 (select needle holder) / G (pick up selected tool)"
+        self.message = "2 then G: pick up the needle holder"
         self.events = []                 # sound cues for the display loop
         self.blood = deque(maxlen=220)   # (position, born, final radius)
         self.clock = 0.0
@@ -498,7 +498,7 @@ class CuttingStation:
         self.tool_pose = self.pose_for_tool(pose)
         self.events.append("pickup")
         self.message = {
-            0: "Arrows (move) / E (lower blade) / G (set down)",
+            0: "Arrows move, E lowers blade, G set down",
             2: "N (align forceps) / F (grip edge)",
             3: "N (align scissors) / X (trim thread)",
         }.get(index, "N (align needle)")
@@ -549,7 +549,7 @@ class CuttingStation:
                 self.message = "X (trim last knot)"
                 return
             if self.held != 1:
-                self.message = "G (set down tool) / 2 then G (pick up needle holder)"
+                self.message = "G set down, then 2 + G: needle holder"
                 return
             if self.exit is not None:
                 return
@@ -608,7 +608,7 @@ class CuttingStation:
             return
 
         if self.held != 1:
-            self.message = "G (set down tool) / 2 then G (pick up needle holder)"
+            self.message = "G set down, then 2 + G: needle holder"
             return
         if action == ord("T"):
             if self.exit is None:
@@ -656,7 +656,7 @@ class CuttingStation:
             self.events.append("puncture")
             self.message = "Press T to tighten and tie"
         else:
-            self.message = "Place the exit straight across from the entry"
+            self.message = "Exit must be straight across the entry"
 
     def cut(self, tip):
         self.depth = 0.0
@@ -668,7 +668,7 @@ class CuttingStation:
             if self.held == 0 and self.tissue.on_vessel(*tip[:2]):
                 vessel_top = self.tissue.vessel_top(*tip[:2])
                 if tip[2] <= vessel_top:
-                    self.message = "Careful - blade on a coronary vessel. Lift (Q) and move away"
+                    self.message = "Blade on a vessel! Lift (Q), move away"
             self.previous_tip = None
             return
         self.depth = min(MAX_DEPTH, surface - tip[2])
@@ -746,25 +746,14 @@ class CuttingStation:
 SWITCH_SITE = ord("P")
 TOGGLE_GUIDE = ord("K")
 
-# Shown at the top right of the view (Key guide button or K hides it).
+# Shown at the bottom right, matching the status box at the bottom left (five rows each).
+# K or the Key guide button hides it.
 KEY_GUIDE = (
-    ("KEY GUIDE", ""),
-    ("Pick up a tool", "number, then G"),
-    ("", "1 scalpel   2 needle holder"),
-    ("", "3 forceps   4 scissors"),
-    ("Set tool down", "G"),
-    ("Move hand", "arrows (hold to glide)"),
-    ("Raise / lower", "Q / E"),
-    ("Align tool", "N"),
-    ("Puncture / grip", "F"),
-    ("Tie knot", "T"),
-    ("Trim thread", "X"),
-    ("Clear cuts", "R  (or Clear repair)"),
-    ("Skin / heart", "P  (or Equality panel)"),
-    ("Re-aim glove", "H"),
-    ("Sound on/off", "M"),
-    ("Zoom", "scroll, + / -, 0 resets"),
-    ("Hide this guide", "K  (or Key guide)"),
+    ("KEYS  Tools", "1 scalpel 2 needle 3 forceps 4 scissors"),
+    ("Hand", "G take / drop   arrows move   Q/E up/down"),
+    ("Suture", "N align   F puncture   T tie   X trim"),
+    ("Reset", "R clear cuts   0 view   H re-aim glove"),
+    ("More", "P skin/heart   M sound   K hide keys"),
 )
 
 # MuJoCo's viewer toggles display options on single keys that overlap ours (Q camera
@@ -901,7 +890,7 @@ def display(frames, preview, site):
                     pressed = [key for key in pressed if key != ord("H")]
                 points = world_pose(sample[1], heading, now)
                 status = ("Rokoko live" if heading.locked
-                          else "Rest your hand flat, fingers toward the screen")
+                          else "Rest hand flat, fingers to the screen")
 
             points = station.update(points, pressed, held)
             with viewer.lock():
@@ -919,11 +908,10 @@ def display(frames, preview, site):
                                if station.held is None else TOOL_NAMES[station.held] + " held")
                 texts = [(int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMLEFT),
                           "SURGICAL TRAINING\nSite\nInstrument\nStitches / depth\nAction",
-                          f"{status}\n{station.site.name.capitalize()}  (switch: Equality panel "
-                          f"on the right, or P)\n{tool_status}\n{len(station.stitches)} / "
+                          f"{status}\n{station.site.name.capitalize()}  (P or Equality panel)\n{tool_status}\n{len(station.stitches)} / "
                           f"{station.depth*1000:.1f} mm\n{station.action_prompt()}")]
                 if show_guide:
-                    texts.append((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_TOPRIGHT),
+                    texts.append((int(mj.mjtFont.mjFONT_NORMAL), int(mj.mjtGridPos.mjGRID_BOTTOMRIGHT),
                                   "\n".join(left for left, _ in KEY_GUIDE),
                                   "\n".join(right for _, right in KEY_GUIDE)))
                 overlay(texts)
