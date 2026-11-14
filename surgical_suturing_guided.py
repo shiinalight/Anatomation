@@ -1,4 +1,4 @@
-"""Practice virtual incisions and sutures in a glove-controlled MuJoCo scene."""
+"""Practice incisions and sutures on skin or on a heart in a glove-controlled MuJoCo operating room."""
 
 import argparse
 from collections import deque
@@ -13,9 +13,8 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
-from or_scene import (INCISION_Y, PAD_MAX, PAD_MIN, PAD_TOP, TABLE_MAX, TABLE_MIN, TRAY_TOP,
-                      Look, Sounds, add_bar, add_capsule, add_geom, build_model, draw_monitor,
-                      surface_height)
+from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
+                      add_capsule, add_geom, build_model, draw_monitor, make_tissue, surface_strip)
 
 SDK = Path.home() / ".local/share/rokoko-device-sdk/examples/python"
 ANCHOR = np.array([0, -0.10, 1.015])
@@ -70,15 +69,16 @@ ZOOM_OUT = {ord("-"), 333}   # - and keypad -
 RESET_VIEW = ord("0")
 
 
-def bench_view(model, data, cam):
-    """Point the free (mouse-controllable) camera exactly where the bench camera looks."""
+def bench_view(model, data, cam, zoom=1.0):
+    """Point the free (mouse-controllable) camera where the bench camera looks; `zoom`
+    below 1 starts closer (the heart site is small)."""
     cid = model.camera("bench").id
     position = data.cam_xpos[cid]
     forward = -data.cam_xmat[cid].reshape(3, 3)[:, 2]
-    distance = (PAD_TOP - position[2]) / forward[2]  # aim at the practice pad surface
+    distance = (WORK_TOP - position[2]) / forward[2]  # aim at the repair site
     cam.type = mj.mjtCamera.mjCAMERA_FREE
     cam.lookat[:] = position + forward*distance
-    cam.distance = distance
+    cam.distance = distance*zoom
     cam.azimuth = np.degrees(np.arctan2(forward[1], forward[0]))
     cam.elevation = np.degrees(np.arcsin(forward[2]))
 
@@ -366,7 +366,12 @@ def draw_instrument(scene, index, grip, direction):
 
 
 class CuttingStation:
-    def __init__(self):
+    """Instrument handling, cutting and suturing on the tissue surface (via `tissue`),
+    with the incision and stitch geometry of the chosen site."""
+
+    def __init__(self, tissue):
+        self.tissue = tissue
+        self.site = tissue.site
         self.marks = deque(maxlen=450)
         self.stitches = []
         self.entry = None
@@ -397,7 +402,7 @@ class CuttingStation:
         length = np.linalg.norm(flat)
         flat = flat / length if length > .001 else TRAY_DIRECTION.copy()
         x, y = xy
-        self.rest[self.held] = (np.array([x, y, surface_height(x, y) + .004]), flat)
+        self.rest[self.held] = (np.array([x, y, self.tissue.rest_height(x, y) + .004]), flat)
         self.events.append("setdown")
         self.held = self.tool_pose = self.previous_tip = self.tissue_grip = None
         self.pinch_finger = None
@@ -469,7 +474,7 @@ class CuttingStation:
         if self.guide_lower_steps:
             count = self.guide_lower_steps
             key = f"{count}xE" if count > 1 else "E"
-            return f"{key} (lower needle to pad)"
+            return f"{key} (lower needle to the {self.site.noun})"
         return "F (puncture opposite edge)" if self.entry is not None else "F (puncture first edge)"
 
     def active_tip(self):
@@ -528,9 +533,9 @@ class CuttingStation:
         elif code == ord("N"):
             if self.held == 2:
                 self.tool_pose = self.pose_for_tool(pose)
-                target = np.array([-.02, INCISION_Y-.012, PAD_TOP+.003])
+                target = self.tissue.point(self.site.point(*self.site.forceps_target), .003)
                 self.offset += target - self.active_tip()
-                self.message = "F (grip or release practice edge)"
+                self.message = "F (grip or release the wound edge)"
                 return
             if self.held == 3 and self.stitches:
                 self.tool_pose = self.pose_for_tool(pose)
@@ -542,10 +547,14 @@ class CuttingStation:
                 return
             if self.exit is not None:
                 return
-            slot = len(self.stitches) % 5
-            x = -.064 + slot*.032 if self.entry is None else self.entry[0]
-            side = -.014 if self.entry is None else -.014 * np.sign(self.entry[1]-INCISION_Y)
-            self.guide_tip = np.array([x, INCISION_Y + side, PAD_TOP+.004])
+            if self.entry is None:
+                along = self.site.slot(len(self.stitches) % self.site.stitch_slots)
+                side = -self.site.bite_guide
+            else:
+                along, entry_side = self.site.coords(self.entry)
+                side = -self.site.bite_guide*np.sign(entry_side)
+            surface = self.tissue.point(self.site.point(along, side))
+            self.guide_tip = surface + np.array([0., 0., .004])
             self.guide_lower_steps = 2
         elif code == ord("C"):
             if self.held is not None:
@@ -558,6 +567,7 @@ class CuttingStation:
             self.entry = self.exit = self.previous_tip = self.tissue_grip = None
             self.guide_tip = None
             self.guide_lower_steps = 0
+            self.blood.clear()
             self.message = "G (pick up selected tool or set it down)"
 
     def stitch(self, action):
@@ -567,12 +577,14 @@ class CuttingStation:
                 self.message = "F (grip practice edge)"
                 return
             tip = self.active_tip()
-            if (abs(tip[2]-PAD_TOP) <= .009 and abs(tip[1]-INCISION_Y) <= .025
-                    and PAD_MIN[0] <= tip[0] <= PAD_MAX[0]):
-                self.tissue_grip = np.array([*tip[:2], PAD_TOP])
+            surface = self.tissue.height(*tip[:2])
+            along, side = self.site.coords(tip)
+            if (surface is not None and abs(tip[2] - surface) <= .009
+                    and abs(side) <= self.site.grip_side and abs(along) <= self.site.grip_along):
+                self.tissue_grip = np.array([*tip[:2], surface])
                 self.message = "Q (lift edge) / F (release)"
             else:
-                self.message = "N (align forceps with practice edge)"
+                self.message = "N (align forceps with the wound edge)"
             return
 
         if action == ord("X"):
@@ -597,7 +609,7 @@ class CuttingStation:
                 self.message = "Pass the needle through both sides first"
                 return
             if len(self.stitches) >= 48:
-                self.message = "Pad full - press R to reset"
+                self.message = "Repair full - press R to reset"
                 return
             self.stitches.append((self.entry, self.exit, False))
             self.events.append("tie")
@@ -611,63 +623,80 @@ class CuttingStation:
         if self.guide_tip is not None and self.guide_lower_steps:
             return
         tip = self.active_tip()
-        if not (PAD_TOP-.012 <= tip[2] <= PAD_TOP+.001
-                and np.all(tip[:2] >= PAD_MIN) and np.all(tip[:2] <= PAD_MAX)):
-            self.message = "Lower the needle tip to the pad"
+        if self.tissue.on_vessel(*tip[:2]):
+            self.message = "Keep the needle off the coronary vessels"
             return
-        point = np.array([*tip[:2], PAD_TOP+.002])
-        side = point[1] - INCISION_Y
-        if not .006 <= abs(side) <= .030:
-            self.message = "Place the needle just beside the incision"
+        surface = self.tissue.height(*tip[:2])
+        if surface is None or not surface - .012 <= tip[2] <= surface + .001:
+            self.message = f"Lower the needle tip to the {self.site.noun}"
+            return
+        point = self.tissue.point(tip[:2], .0015)
+        along, side = self.site.coords(point)
+        site = self.site
+        if not (site.bite_min <= abs(side) <= site.bite_max and abs(along) <= site.along_limit):
+            self.message = (f"Place the needle {site.bite_min*1000:.0f}-{site.bite_max*1000:.0f} mm "
+                            "beside the wound")
             return
         if self.entry is None:
             self.entry = point
             self.guide_tip = None
             self.bleed(point, .0011)
             self.events.append("puncture")
-        elif side*(self.entry[1]-INCISION_Y) < 0 and abs(point[0]-self.entry[0]) <= .027:
+            return
+        entry_along, entry_side = self.site.coords(self.entry)
+        if side*entry_side < 0 and abs(along - entry_along) <= site.exit_tolerance:
             self.exit = point
             self.bleed(point, .0011)
             self.events.append("puncture")
             self.message = "Press T to tighten and tie"
         else:
-            self.message = "Place the exit across from the entry"
+            self.message = "Place the exit straight across from the entry"
 
     def cut(self, tip):
         self.depth = 0.0
-        if tip is None or tip[2] > PAD_TOP or np.any(tip[:2] < PAD_MIN) or np.any(tip[:2] > PAD_MAX):
+        if tip is None:
             self.previous_tip = None
             return
-        self.depth = min(MAX_DEPTH, PAD_TOP - tip[2])
-        point = np.array([*tip[:2], PAD_TOP + .0007])
+        surface = self.tissue.height(*tip[:2])
+        if surface is None or tip[2] > surface:
+            if self.held == 0 and self.tissue.on_vessel(*tip[:2]):
+                vessel_top = self.tissue.vessel_top(*tip[:2])
+                if tip[2] <= vessel_top:
+                    self.message = "Careful - blade on a coronary vessel. Lift (Q) and move away"
+            self.previous_tip = None
+            return
+        self.depth = min(MAX_DEPTH, surface - tip[2])
+        normal = self.tissue.normal(*tip[:2])
+        point = np.array([*tip[:2], surface]) + normal*.0007
         if self.previous_tip is not None:
             distance = np.linalg.norm(point-self.previous_tip)
             if .0012 <= distance <= .025:
-                self.marks.append(self.wound_segment(self.previous_tip, point, self.depth))
+                self.marks.append(self.wound_segment(self.previous_tip, point, self.depth, normal))
                 # Deeper cuts ooze: drops appear along the wound and slowly spread.
                 if self.depth > .0012 and np.random.random() < .18 + 40*self.depth:
                     along = (point - self.previous_tip) / distance
-                    beside = np.cross(along, [0, 0, 1])*np.random.uniform(-.0015, .0015)
+                    beside = np.cross(along, normal)*np.random.uniform(-.0015, .0015)
                     self.bleed(point + beside, np.random.uniform(.0014, .0018) + .35*self.depth)
             elif distance < .0012:
                 return
         self.previous_tip = point
 
-    @staticmethod
-    def wound_segment(start, end, depth):
-        """Precomputed flat ellipses for one cut segment: pink everted edges around a
-        wet dark gap that widens with depth, so the cut reads as an opening in the skin."""
+    def wound_segment(self, start, end, depth, normal):
+        """Flat ellipses lying on the tissue surface for one cut segment: everted edges
+        around a wet dark gap that widens with depth."""
         radius = .0006 + .24*depth
-        along = end - start
-        length = max(np.linalg.norm(along), 1e-6)
-        along = along / length
-        basis = np.column_stack((along, np.cross([0, 0, 1], along), [0, 0, 1])).ravel()
-        centre = (start + end)/2
-        return (np.array([length/2 + radius*2.2, radius*2.0, .0003]), centre - [0, 0, .0004],
-                np.array([length/2 + radius, radius*.85, .0004]), centre, basis)
+        lip = surface_strip(start - normal*.0004, end - normal*.0004, radius*2.0, .0003, normal,
+                            self.site.lip_material)
+        gap = surface_strip(start, end, radius*.85, .0004, normal, "wound")
+        return lip, gap
 
     def bleed(self, point, radius):
-        self.blood.append((np.array([point[0], point[1], PAD_TOP + .0004]), self.clock, radius))
+        xy = point[:2]
+        surface = self.tissue.point(xy, .0004)
+        if surface is None:
+            return
+        _, _, matrix, _ = surface_strip(surface, surface, 0, 0, self.tissue.normal(*xy), "blood")
+        self.blood.append((surface, matrix, self.clock, radius))
 
     def draw(self, scene, now=None):
         if now is not None:
@@ -679,13 +708,15 @@ class CuttingStation:
             displacement = np.clip(tip - self.tissue_grip, -.024, .024)
             draw_capsule(scene, self.tissue_grip, self.tissue_grip + displacement, .003, "lip")
         ellipse = mj.mjtGeom.mjGEOM_ELLIPSOID
-        for lip_size, lip_pos, gap_size, gap_pos, basis in self.marks:
-            draw_geom(scene, ellipse, lip_size, lip_pos, basis, "lip")
-            draw_geom(scene, ellipse, gap_size, gap_pos, basis, "wound")
-        for position, born, radius in self.blood:
+        for size, pos, matrix, material in self.tissue.wound:
+            draw_geom(scene, ellipse, size, pos, matrix, material)
+        for segment in self.marks:
+            for size, pos, matrix, material in segment:
+                draw_geom(scene, ellipse, size, pos, matrix, material)
+        for position, matrix, born, radius in self.blood:
             grow = min(1.0, max(self.clock - born, 0) / 2.5)**.5
             r = radius*(.35 + .65*grow)
-            draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [r, r*.9, r*.28], position, np.eye(3), "blood")
+            draw_geom(scene, ellipse, [r, r*.9, r*.28], position, matrix, "blood")
         for entry, exit, trimmed in self.stitches:
             self.draw_thread(scene, entry, exit, True, trimmed)
         if self.entry is not None:
@@ -695,14 +726,13 @@ class CuttingStation:
             if end is not None:
                 self.draw_thread(scene, self.entry, end, False, False)
 
-    @staticmethod
-    def draw_thread(scene, entry, exit, tied, trimmed):
+    def draw_thread(self, scene, entry, exit, tied, trimmed):
         mid = (entry+exit)/2 + np.array([0., 0., .003 if tied else .013])
         draw_path(scene, [entry, (entry+mid)/2, mid, (mid+exit)/2, exit], .0008, "thread")
         if tied:
             knot = exit + np.array([0., 0., .001])
             draw_geom(scene, mj.mjtGeom.mjGEOM_ELLIPSOID, [.0019, .0014, .0012], knot, np.eye(3), "thread")
-            length = .003 if trimmed else .012
+            length = self.site.tail_length*(.3 if trimmed else 1)
             for spread in (.6, -.2):
                 draw_capsule(scene, knot, knot + np.array([length, length*spread, .0004]), .0006, "thread")
 
@@ -714,21 +744,21 @@ def draw_user(scene, points, station, now):
     draw_monitor(scene, now)
 
 
-def display(frames, preview):
-    model = build_model()
+def display(frames, preview, site):
+    model = build_model(site)
     Look.model = model
     data = mj.MjData(model)
     mj.mj_forward(model, data)
     heading = Heading()
     last_status = None
     keys = SimpleQueue()
-    station = CuttingStation()
+    station = CuttingStation(make_tissue(model, data, site))
     held_keys = HeldKeys()
     sounds = Sounds()
     last_frame = time.monotonic()
     print("1 scalpel | 2 needle holder | 3 forceps | 4 scissors | G pick up/set down\n"
           "Arrows move, Q/E raise/lower (tap for a small step, hold to glide).\n"
-          "N aligns tools, F punctures or grips tissue, T ties, X trims. R clears pad.\n"
+          "N aligns tools, F punctures or grips tissue, T ties, X trims. R clears the repair.\n"
           "View: scroll or +/- to zoom, left-drag to orbit, right-drag to pan,\n"
           "      double-right-click a spot (tissue, tray, room) to zoom around it, 0 resets the view.\n"
           "H re-aims the glove: press H, then rest your hand flat with fingers toward the screen for a moment.\n"
@@ -737,7 +767,7 @@ def display(frames, preview):
 
     with mujoco.viewer.launch_passive(model, data, key_callback=keys.put) as viewer:
         with viewer.lock():
-            bench_view(model, data, viewer.cam)
+            bench_view(model, data, viewer.cam, site.zoom)
         overlay = getattr(viewer, "set_texts", None)
         next_overlay = 0.0
         while viewer.is_running():
@@ -762,10 +792,10 @@ def display(frames, preview):
                 with viewer.lock():
                     for code in zoom:
                         if code == RESET_VIEW:
-                            bench_view(model, data, viewer.cam)
+                            bench_view(model, data, viewer.cam, site.zoom)
                         else:
                             if viewer.cam.type != mj.mjtCamera.mjCAMERA_FREE:
-                                bench_view(model, data, viewer.cam)
+                                bench_view(model, data, viewer.cam, site.zoom)
                             factor = .8 if code in ZOOM_IN else 1.25
                             viewer.cam.distance = float(np.clip(viewer.cam.distance*factor, .03, 6))
 
@@ -808,10 +838,14 @@ def display(frames, preview):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preview", action="store_true", help="Practice cutting with the keyboard and no glove")
+    parser.add_argument("--site", choices=sorted(SITES), default="skin",
+                        help="What to operate on: the skin pad (default) or the heart")
     args = parser.parse_args()
+    site = SITES[args.site]
+    print(f"Operating site: {site.name}", flush=True)
     frames = Frames()
     if args.preview:
-        display(frames, True)
+        display(frames, True, site)
         return
     stream_script = SDK / "rgmp_stream.py"
     if not stream_script.is_file():
@@ -826,7 +860,7 @@ def main():
     ) as process:
         threading.Thread(target=frames.read, args=(process.stdout,), daemon=True).start()
         try:
-            display(frames, False)
+            display(frames, False, site)
         finally:
             if process.poll() is None:
                 process.terminate()
