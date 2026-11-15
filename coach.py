@@ -17,6 +17,16 @@ CONTROLS = (
     "R starts over, H re-aims the gloves. Panel: Autopilot replays the best recorded attempt."
 )
 
+HANDS_ONLY = (
+    "Mode: hands-only with the data gloves. There are NO keys in this mode: never tell the trainee "
+    "to press a key. The tool glides above the next yellow point by itself ('Relax your wrist: moving "
+    "into place'); then every step is a wrist movement: bend the wrist down to catch the yellow point "
+    "(it snaps in inside the yellow zone), turn the wrist a little to cut along the yellow line or "
+    "push the needle through, bend the wrist up to pull the thread through. Only when the current "
+    "action asks for it, the trainee rests the right hand flat, fingers to the screen, so the glove "
+    "can lock its direction."
+)
+
 
 def describe_tasks(summary, store=None):
     lines = []
@@ -74,7 +84,7 @@ class Coach:
             f"Site: {station.site.name}. " + ("The autopilot is replaying the best attempt. " if autopilot else ""),
             f"Current action: {(side.capitalize() + ' hand: ') if side else ''}{step}",
             f"Hands: {hands}. Stitches tied: {len(station.stitches)}.",
-            CONTROLS,
+            HANDS_ONLY if getattr(station, "guide", None) is not None else CONTROLS,
         ]
         if self.recent:
             lines.append("Recent events: " + "; ".join(self.recent[-6:]))

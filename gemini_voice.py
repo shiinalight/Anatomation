@@ -60,6 +60,8 @@ def answer_question(api_key, pcm, rate, context, question=None, *, review=False)
             "heart laceration, or a guided coronary bypass on a heart model). The right hand cuts and drives "
             "the needle; the left hand steadies tissue, lifts each edge with forceps, and pulls the suture "
             "through; knots are three-throw instrument ties. The keyboard follows the hand the next step needs. "
+            "Hands-only procedures use no keys at all, only wrist movements: when the supplied state says "
+            "hands-only, describe wrist movements and never mention keys. "
             "Answer the trainee's question using the supplied simulator state and controls. "
             "If asked what to do now, start with the supplied Current action, preserving every key "
             "and repetition count. Never replace it with a later step. Only describe actions implemented "
@@ -187,6 +189,7 @@ class GeminiVoice:
             return False
         self._stop_recording()
         self.context = identity
+        self.previous_identity = identity    # (else update() takes it for a new exercise and drops the answer)
         self.read_aloud = False
         self.pending = self.worker.submit(answer_question, self.api_key, None, None,
                                           self._prompt(context), question, review=review)
