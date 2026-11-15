@@ -1292,6 +1292,10 @@ class CuttingStation:
         side, text = self.plan()
         if short and self.procedure is not None and self.procedure.head():
             text = text.replace(self.procedure.head(), "", 1)
+        if side is not None and side != self.active and not self.both:
+            # Z or a double-click put the keys on the other hand: the step's keys would go there
+            return (f"{side.capitalize()} hand next, but the keys move the {self.active} hand: "
+                    f"press Z (or double-click the {side} hand)")
         return text if side is None else f"{side.capitalize()} hand: {text}"
 
     # --- cutting -------------------------------------------------------------------------
