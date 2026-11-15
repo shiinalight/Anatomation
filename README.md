@@ -4,11 +4,11 @@
 
 # Anatomation
 
-**The TelePharm virtual suturing workstation**
+**The TelePharm virtual surgical training workstation**
 
-Practice on a virtual heart, then see where your instruments went and how the attempt unfolded.
+Practice two-handed incisions, suturing, and coronary bypass in a virtual cardiac operating room. Review your scores and replay your best recorded attempt.
 
-**[Take a look](#take-a-look)** · **[Watch a complete run](#first-practice-run)** · **[Run locally](#quick-start)** · **[Explore SurgiSense](#browser-workbench)**
+**[Take a look](#take-a-look)** · **[Try a keyboard run](#first-practice-run)** · **[Run locally](#quick-start)** · **[Explore SurgiSense](#browser-workbench)**
 
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-FF6300?style=flat-square&logo=python&logoColor=FFFFFF)
 ![MuJoCo simulation](https://img.shields.io/badge/MuJoCo-Simulation-2847F4?style=flat-square&labelColor=080808)
@@ -23,42 +23,38 @@ Practice on a virtual heart, then see where your instruments went and how the at
 
 ### At the operating table
 
-Follow the guide through an incision, five stitches, and a final trim. The procedure checklist tracks each stage while the live panel shows the tool, next action, and tip measurements.
+Control two hands with the keyboard or Rokoko Smartgloves. The procedure checklist tracks each step, and the status overlay shows the instrument in each hand, stitch count, and the next action.
 
-[![TelePharm desktop workstation with a blue virtual glove and needle holder over a heart model, a procedure checklist on the left, and live feedback on the right.](docs/readme/anatomation-heart-lab.webp)](docs/readme/telepharm-workstation.webp)
+[![Current heart suturing exercise showing two hands, the exposed NIH 3D heart, instrument trays, and the MuJoCo checklist.](docs/readme/current-heart-suture.jpg)](docs/readme/current-heart-suture.jpg)
 
-| The operating room | The practice-pad demo |
+| The operating room | Skin suturing |
 | :---: | :---: |
-| [![Wide MuJoCo operating-room render with table, instruments, overhead lights, and monitor.](docs/readme/anatomation-operating-room.webp)](operating_room_preview.png) | [![Virtual operating table with gloved hand and sutures on a practice pad.](docs/readme/anatomation-practice-pad.webp)](surgery_stitches_preview.png) |
-| The scene behind the desktop workstation. | The scripted instrument and stitching sequence. |
+| [![Wide view of the current cardiac operating room with the draped patient, monitors, and perfusion equipment.](docs/readme/current-operating-room.jpg)](docs/readme/current-operating-room.jpg) | [![Keyboard practice with the left hand holding forceps and the right hand holding a needle holder at the skin station.](docs/readme/current-skin-suture.jpg)](docs/readme/current-skin-suture.jpg) |
+| The cardiac simulator’s table, equipment, and animated displays. | A laceration on the curved chest surface, with the instruments ready for the first stitch. |
 
-### After the last stitch
+### Follow the procedure
 
-**Session Review** puts the attempt’s timeline, virtual tip trajectory, and stitch count together. This keyboard run finished with all five stitches tied and zero rejected actions.
+The **SurgiSense | Procedures** window lists the available exercises and tracks the current one. In this keyboard run, the needle holder and forceps are in place and the checklist has advanced to the first stitch.
 
-[![Session Review after a complete keyboard run with a virtual tip trajectory and timestamped procedure events.](docs/readme/anatomation-session-review.webp)](docs/readme/telepharm-session-review.webp)
+[![The current Procedures window with Skin: suture the laceration selected, both instruments checked off, and the steps for the first stitch.](docs/readme/current-procedures.jpg)](docs/readme/current-procedures.jpg)
 
 ### A closer look in SurgiSense
 
-In the browser workbench, click a stroke or stitch on the sample pad to inspect it. The workbench also lets you toggle layers, replay the sample, and export measurements.
+The SurgiSense analysis prototype shows how a pad map, session findings, and instrument measurements could appear in a browser workbench.
 
-[![SurgiSense sample session showing the interactive pad map, selected stroke, deviation chart, and recorded actions.](docs/readme/anatomation-surgisense-analysis.webp)](docs/readme/surgisense-workbench.webp)
+[![Static SurgiSense browser analysis design with a top-down practice pad, session findings, and measurements.](docs/readme/anatomation-pad-map-prototype.webp)](surgisense-design/analysis-preview.png)
 
 <details>
 <summary><strong>More from the project gallery</strong></summary>
 
-| Heart mesh | Stitch-heart mascot |
+| Heart model | Stitch-heart mascot |
 | :---: | :---: |
-| [![Isolated preview of the heart mesh used by the guided scene.](docs/readme/anatomation-heart-mesh.webp)](human-heart-preview.png) | [![TelePharm mascot with a stitched heart and a smiling face.](docs/readme/anatomation-stitch-heart.webp)](stitch-heart-mascot.png) |
-| [Heart model file](human-heart.glb) | [Mascot model file](stitch-heart-mascot.stl) |
+| [![Current NIH 3D heart model inside the chest retractor.](docs/readme/current-heart-suture.jpg)](docs/readme/current-heart-suture.jpg) | [![TelePharm mascot with a stitched heart and a smiling face.](docs/readme/anatomation-stitch-heart.webp)](stitch-heart-mascot.png) |
+| [NIH 3D model files](assets/heart-nih3d/) | [Mascot artwork](stitch-heart-mascot.png) |
 
 **SurgiSense workstation prototype**
 
-[![Alternate browser workstation design with a practice-pad reference, procedure steps, and coaching panel.](docs/readme/anatomation-workstation-prototype.webp)](surgisense-design/dashboard-preview.png)
-
-**SurgiSense analysis prototype**
-
-[![Alternate browser analysis design with a top-down practice pad, session findings, and measurements.](docs/readme/anatomation-pad-map-prototype.webp)](surgisense-design/analysis-preview.png)
+[![Static browser workstation design with a practice-pad reference, procedure steps, and coaching panel.](docs/readme/anatomation-workstation-prototype.webp)](surgisense-design/dashboard-preview.png)
 
 </details>
 
@@ -66,148 +62,133 @@ In the browser workbench, click a stroke or stitch on the sample pad to inspect 
 
 | I want to… | Open | What I need |
 | --- | --- | --- |
-| Explore a sample session | [SurgiSense browser workbench](#browser-workbench) | A browser and the local workspace files |
-| Practice on the virtual heart | [Guided Training](#launch-the-desktop-workstation) | Windows, Python 3.11 with Tk, and working OpenGL graphics |
-| Watch the practice-pad demo | [Scripted demo](#launch-modes) | The same desktop setup |
-| Use a glove or hosted coach | [Live glove and AI coaching](#live-glove-and-ai-coaching) | A licensed Rokoko Device SDK for USB tracking, or an AI Studio key for hosted coaching |
+| Practice suturing on skin | [Desktop workstation](#launch-the-desktop-workstation) | Python 3.11 with Tk and working OpenGL |
+| Try a heart procedure | [Launch modes](#launch-modes) | The same desktop setup |
+| Explore the SurgiSense designs | [Browser workbench](#browser-workbench) | The static design previews in this repository |
+| Use gloves or a hosted coach | [Live glove and AI coaching](#live-glove-and-ai-coaching) | Rokoko Device SDK and hand solver for live tracking, or hosted coaching credentials |
 
 ### Launch the desktop workstation
 
-Open PowerShell in the folder containing `hand_lab.py` and `human-heart.glb`. With Python 3.11 on your `PATH`, run:
+Open PowerShell at the repository root and run:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install mujoco numpy Pillow lz4
-.\.venv\Scripts\python.exe -B hand_lab.py --preview --guided
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe surgical_suturing_guided.py --preview
 ```
 
-The window should show **Keyboard practice**, four instruments, and the procedure checklist. You can complete and review an attempt offline after installing the dependencies. Keep `human-heart.glb` and `surgery_lab.xml` alongside `hand_lab.py`.
+The **MuJoCo: Operating room** and **SurgiSense | Procedures** windows open with **Skin: suture the laceration** selected. Preview mode uses the keyboard for both hands. For macOS setup, see the [simulator guide](SIMULATOR.md#run-on-macos).
 
 ### Launch modes
 
 <details open>
-<summary><strong>Windows launchers and their options</strong></summary>
+<summary><strong>Choose a procedure</strong></summary>
 
-The `.cmd` files use `python` from `PATH`. To use them with the virtual environment above, run the following in the current PowerShell window:
+Select an exercise in **SurgiSense | Procedures**, or press <kbd>P</kbd> in the viewer to cycle through the exercises. If you close the picker, click **Procedures** in the viewer’s **Equality** panel to reopen it.
+
+| Exercise | `--procedure` values |
+| --- | --- |
+| Guided incision | `skin-incision`, `heart-incision` |
+| Guided suturing | `skin-suture` (default), `heart-suture` |
+| Guided coronary artery bypass | `heart-bypass` |
+| Prompted free stitching | `skin-stitch`, `heart-stitch` |
+| Free practice | `skin-free`, `heart-free` |
+
+To open directly on the heart:
 
 ```powershell
-$env:Path = "$(Resolve-Path .\.venv\Scripts);$env:Path"
+.\.venv\Scripts\python.exe surgical_suturing_guided.py --preview --procedure heart-suture
 ```
-
-| Launcher | Opens |
-| --- | --- |
-| [`Surgery Guided Preview.cmd`](Surgery%20Guided%20Preview.cmd) | Guided heart workstation with keyboard input |
-| [`Surgery Preview.cmd`](Surgery%20Preview.cmd) | Manual practice-pad viewer. Press <kbd>T</kbd> for its automated sequence. |
-| [`Surgery Demo.cmd`](Surgery%20Demo.cmd) | Practice-pad viewer with the scripted sequence already running |
-| [`Surgery Live.cmd`](Surgery%20Live.cmd) with `--guided` | Heart workstation with USB glove input and local feedback |
-| [`Surgery Gemma.cmd`](Surgery%20Gemma.cmd) | Keyboard practice-pad viewer with hosted still-frame review. Add `--guided` for the heart. |
-| [`Surgery Voice.cmd`](Surgery%20Voice.cmd) | Guided heart workstation with glove input and both hosted coaches. Add `--preview` to use the keyboard. |
-
-Run `.\.venv\Scripts\python.exe hand_lab.py --help` for the available flags. The pad viewer has its own controls. In that viewer <kbd>Q</kbd> lowers, <kbd>E</kbd> raises, and <kbd>H</kbd> assists placing a stitch. The heart workstation uses <kbd>Q</kbd> to raise and <kbd>E</kbd> to lower.
 
 </details>
 
 ## First practice run
 
 <details>
-<summary><strong>Watch a complete keyboard attempt</strong></summary>
+<summary><strong>Follow the keyboard checklist</strong></summary>
 
-![Animated capture of the guided heart workstation advancing from the incision guide through five tied stitches and the final trimmed suture.](docs/readme/anatomation-keyboard-replay.gif)
+In **Skin: suture the laceration**, the green cuff marks the hand controlled by the movement keys. The status overlay identifies the hand and the next key. Use the **Procedures** window to see the full checklist for the current stitch.
 
 </details>
 
-1. **Trace the virtual incision.** Press <kbd>1</kbd>, <kbd>G</kbd>, <kbd>N</kbd>, then <kbd>E</kbd> twice. Hold <kbd>↑</kbd> to follow the visible guide to its end. Use the procedure checklist to confirm the trace is complete.
-2. **Lift the practice edge.** Set down the scalpel with <kbd>G</kbd>. Press <kbd>3</kbd>, <kbd>G</kbd>, <kbd>N</kbd>, then <kbd>F</kbd> to grip. Tap <kbd>Q</kbd> to lift, <kbd>F</kbd> to release, and <kbd>G</kbd> to set down the forceps.
-3. **Tie five stitches.** Press <kbd>2</kbd> and <kbd>G</kbd>. For each stitch, use <kbd>N</kbd> → <kbd>E</kbd> twice → <kbd>F</kbd> on the first edge, repeat on the opposite edge, then press <kbd>T</kbd>.
-4. **Finish the exercise.** Set down the holder with <kbd>G</kbd>. Press <kbd>4</kbd>, <kbd>G</kbd>, <kbd>N</kbd>, <kbd>X</kbd> to trim the last stitch, then <kbd>G</kbd> to set down the scissors. Open **Session Review** to see the result.
+1. **Equip both hands.** Press <kbd>2</kbd>, then <kbd>G</kbd> to give the right hand the needle holder. The active hand switches to the left. Press <kbd>3</kbd>, then <kbd>G</kbd> to pick up the forceps.
+2. **Follow the stitch prompts.** The left forceps lift each edge while the right needle holder passes through it. The left forceps then grasp the needle tip and pull the virtual suture through.
+3. **Tie and finish.** Use <kbd>T</kbd> for each of the three knot throws. Follow the checklist through the remaining stitches and use the status overlay to see the score. See the [simulator guide](SIMULATOR.md#two-handed-technique) for the full exercise sequence.
 
 <details>
 <summary><strong>Keyboard shortcuts and viewport controls</strong></summary>
 
-| Control | Action in the heart workstation |
+| Control | Action in the workstation |
 | --- | --- |
 | <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd> | Select scalpel / needle holder / forceps / suture scissors |
 | <kbd>G</kbd> | Pick up the selected instrument or set down the held one |
-| <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> | Translate along the table |
+| <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> | Translate along the table |
 | <kbd>Q</kbd> / <kbd>E</kbd> | Raise / lower |
+| <kbd>Z</kbd> / <kbd>Y</kbd> | Swap hands / toggle moving both hands together |
 | <kbd>N</kbd> | Assist with tool alignment for the current action |
-| <kbd>F</kbd> / <kbd>T</kbd> / <kbd>X</kbd> | Place a needle entry or exit point, or toggle the forceps grip / tie / trim |
-| <kbd>C</kbd> / <kbd>R</kbd> / <kbd>K</kbd> | Park the tool and recenter the hand / save and reset the attempt / calibrate the live glove |
-| <kbd>B</kbd> / <kbd>V</kbd> | Request a Gemma frame review / toggle Gemini microphone capture. Both require the corresponding coach. |
+| <kbd>F</kbd> / <kbd>T</kbd> / <kbd>X</kbd> | Grip or pass the needle / throw a knot / trim |
+| <kbd>R</kbd> / <kbd>K</kbd> / <kbd>H</kbd> | Save and reset the attempt / toggle the key guide / recalibrate the gloves |
+| <kbd>I</kbd> / <kbd>B</kbd> / <kbd>V</kbd> | Open the AI assistant / request a Gemma review / toggle Gemini voice |
 
-The viewport toolbar switches between room and close-up views, zooms and recenters the camera, and toggles **Targets** and the recent tip **Path**. Click **Guided Training** to switch to **Free Practice**, which hides the targets and stage hints. Click the viewport to return keyboard focus after using the coach panel.
+Scroll to zoom, left-drag to orbit, right-drag to pan, and press <kbd>0</kbd> to reset the view. Double-click a hand to select it, or double-right-click a spot to zoom around it.
 
 </details>
 
 ## Session review
 
-**Session Review** opens the current attempt or a recent saved one. The review shows duration, completed stages, stitches tied, rejected actions, tracking interruptions, an event timeline, and a top-down plot of the instrument-tip path. Attempts with recorded events are written as JSON when you press <kbd>R</kbd> or close the workstation normally. On Windows, find them in `%LOCALAPPDATA%\TelePharm\sessions`.
+The status overlay shows the most recent score and the best complete score for the current procedure. The simulator writes attempt summaries to `training-data/attempts/` when you finish, press <kbd>R</kbd>, switch exercises, or close the viewer with an attempt in progress. Complete recordings are saved in `training-data/runs/`.
+
+Choose **Autopilot** in the **Equality** panel to replay the best complete recording for the current procedure. Starting replay also exports the instrument trajectory to `training-data/robot/`.
 
 <details>
 <summary><strong>What the simulator measures</strong></summary>
 
 | Measure | Meaning |
 | --- | --- |
-| Sampled tip path | Distance accumulated between consecutive tool-tip samples at up to 10 Hz. The app skips long gaps, tool changes, tracking-state changes, and assisted jumps. |
-| Virtual tip variation | RMS distance of recent tip samples from the midpoints of their neighbors, in millimeters. |
-| Holder shaft angle | Needle-holder elevation relative to the horizontal table. |
-| Distance to guide | Distance from the virtual tip to the active assisted target, when available. |
-| Rejected actions | Inputs such as a puncture attempted before lowering to the target, with the reason recorded in the timeline. |
+| Task time | Elapsed time for each recorded cut or stitch |
+| Instrument travel | Distance traveled by the instrument tip during a task |
+| Rejected actions | Inputs the simulator refused, such as a needle pass attempted before the target was reached |
+| Needle accuracy | Distance from the needle target during a pass |
 
-The heart surface and interactions are geometric simulations, with scripted tool actions and rendered marks. The prototype lacks deformable tissue, measured contact forces, physical thread tension, and validated clinical proficiency scoring. Its measurements describe the virtual exercise.
+The score describes performance within the simulated exercise.
 
 </details>
 
 ## Browser workbench
 
-Open [`surgisense-workbench/index.html`](surgisense-workbench/index.html) **from your local files**. On Windows, run the following from the workspace root, or double-click the file in Explorer:
-
-```powershell
-Start-Process .\surgisense-workbench\index.html
-```
-
-Select **Explore session analysis**, then choose a stroke or stitch on the pad map to see its measurements. Toggle **Strokes**, **Stitches**, and **Band**, or use **Export measurements** for a CSV. Under **Practice**, press **Play** or drag the slider to move through the 48-second sample. Under **Training**, select a stage to see its cue.
-
-The workbench runs on built-in sample coordinates. The desktop workstation saves its own attempts as local JSON for **Session Review**.
+Explore the [SurgiSense design previews](surgisense-design/) for the browser workstation and analysis layouts. The desktop simulator writes its own attempt summaries and recordings to `training-data/`.
 
 ## Live glove and AI coaching
 
 <details>
-<summary><strong>Connect a Rokoko Smartglove over USB</strong></summary>
+<summary><strong>Connect Rokoko Smartgloves over USB</strong></summary>
 
-1. Install and activate the [Rokoko Device SDK](https://sdk.rokoko.com/) and connect a USB-streaming-capable Smartglove. Close Rokoko Studio if it is using the glove.
-2. Apply the `PATH` step under [Launch modes](#launch-modes), then run the launcher from the workspace root. Add `--hand left` for a left glove. The default is right.
+1. Start the Rokoko Device SDK with `rokoko-sdk --auto-stream-usb`.
+2. In a separate terminal, start the hand solver with `rkk-hand-solver --no-driver --emit-openxr`. The simulator reads the solver’s local TCP stream on port `12277`.
+3. Launch the simulator without `--preview`. Focus the viewport, press <kbd>H</kbd>, and rest your hands palm-down with your fingers pointing toward the monitor to calibrate.
 
-   ```powershell
-   & '.\Surgery Live.cmd' --guided
-   ```
-
-3. Wait for the calibration prompt. Hold your hand flat and press <kbd>K</kbd> with the viewport focused. Use the keyboard to translate the hand while the glove controls wrist orientation and finger curl.
-
-The launcher reuses a service on `127.0.0.1:12276` or starts `%LOCALAPPDATA%\Rokoko Device SDK\bin\rokoko-sdk.exe` with `--auto-stream-usb`. If your SDK is already running on a custom port, call `hand_lab.py --sdk --guided --sdk-port PORT` directly. For local Rokoko Studio UDP input instead, run `hand_lab.py --guided` with Studio streaming to `127.0.0.1:14043`, or set `--port PORT` to match.
+A hand without a connected glove uses the keyboard. See the [documented macOS setup](SIMULATOR.md#run-on-macos) for the full launch commands.
 
 </details>
 
 <details>
 <summary><strong>Enable Gemma frame review and Gemini voice or text</strong></summary>
 
-Install `sounddevice` for voice and get a key from [Google AI Studio](https://ai.google.dev/gemini-api/docs/api-key). To try both coaches with the keyboard:
+Install the optional requirements in the project’s virtual environment:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install sounddevice
-& '.\Surgery Voice.cmd' --preview
+.\.venv\Scripts\python.exe -m pip install -r requirements-ai.txt
 ```
 
-Use the `PATH` step under [Launch modes](#launch-modes) first. The Windows launcher can read `SURGERY_GEMMA_API_KEY` from a local `.env` or the environment. If it prompts you for a key, it saves the entry encrypted for your Windows account. Use `--replace-key` to replace the saved key. Keep keys out of commits.
+Copy [`.env.example`](.env.example) to `.env`. Set `SURGERY_GEMMA_API_KEY` for Gemini and hosted Gemma, or configure `GEMMA_MODAL_URL` and `GEMMA_MODAL_TOKEN` for Gemma on Modal.
 
 | Action | Data sent to the hosted coach |
 | --- | --- |
-| <kbd>B</kbd> or **Review scene** | A rendered simulation frame plus current exercise context goes to Gemma. |
-| <kbd>V</kbd> or **Start voice** | A microphone clip after a pause, plus exercise context, goes to Gemini. The app pauses capture during speech playback. |
-| Type in **Ask the Coach** | The question and current exercise context go to Gemini. |
-| **Ask Gemini for a review** | A summary of the selected attempt, including counts, completed stages, and up to 20 recent events, goes to Gemini. The reply opens in the coach panel. |
+| <kbd>B</kbd> or **Gemma review** | A rendered simulation frame and exercise context go to Gemma. |
+| <kbd>V</kbd> or **AI Voice** | Gemini receives microphone clips and exercise context while voice is active. |
+| <kbd>I</kbd> or **AI Assistant**, then type a question | Gemini receives the question and current exercise context. |
 
-Frame-only coaching works without `sounddevice`. Use `& '.\Surgery Gemma.cmd' --guided` to enable it in the keyboard workstation. The local checklist, measurements, and session review are available with coaching disabled.
+For optional PostgreSQL attempt sync and Kafka telemetry, follow the [Aiven setup in the simulator guide](SIMULATOR.md#recording-scoring-autopilot-and-ai-coach). The simulator can score, save, and replay exercises locally.
 
 </details>
 
@@ -236,33 +217,34 @@ panel, next to Procedures, Reset hands and the others:
 
 ```mermaid
 flowchart LR
-    Input[Keyboard or Rokoko glove] --> Viewer[MuJoCo workstation]
-    Viewer --> Exercise[Heart exercise and instrument actions]
-    Exercise --> Review[Local assessment and session JSON]
-    Viewer -->|On request| Coach[Hosted Gemma and Gemini]
-    Sample[Built-in example coordinates] --> Web[SurgiSense browser workbench]
+    Input[Keyboard or Rokoko Smartgloves] --> Viewer[MuJoCo workstation]
+    Viewer --> Exercise[Skin and heart procedures]
+    Exercise --> Review[Local scores and recordings]
+    Review --> Replay[Autopilot replay]
+    Viewer -->|When enabled| Coach[Gemma and Gemini]
+    Review -->|When configured| Aiven[Aiven sync]
+    Web[SurgiSense browser designs]
     classDef simulator fill:#FFE900,stroke:#080808,stroke-width:3px,color:#080808
     classDef review fill:#CAFF00,stroke:#080808,stroke-width:3px,color:#080808
     class Input,Viewer,Exercise simulator
-    class Review,Coach,Sample,Web review
+    class Review,Replay,Coach,Aiven,Web review
 ```
 
 | Files | Role |
 | --- | --- |
-| [`hand_lab.py`](hand_lab.py), [`surgery_interface.py`](surgery_interface.py) | Desktop entry point and Tk workstation UI |
-| [`guided_surgery.py`](guided_surgery.py), [`heart_surface.py`](heart_surface.py), [`surgery_lab.xml`](surgery_lab.xml) | Instrument actions, heart surface, and operating-room scene |
-| [`training_session.py`](training_session.py) | Local assessment, trajectory sampling, and JSON reports |
-| [`rokoko_rgmp.py`](rokoko_rgmp.py), [`Start-Surgery.ps1`](Start-Surgery.ps1) | Glove input and Windows live launcher |
-| [`gemma_coach.py`](gemma_coach.py), [`gemini_voice.py`](gemini_voice.py) | Hosted visual, voice, and text coaching |
-| [`suturing.py`](suturing.py), [`surgisense-workbench/`](surgisense-workbench/) | Scripted practice pad and standalone browser workbench |
+| [`surgical_suturing_guided.py`](surgical_suturing_guided.py), [`procedure_window.py`](procedure_window.py) | Desktop entry point, glove input, and procedure picker |
+| [`procedures.py`](procedures.py), [`bypass.py`](bypass.py) | Exercise definitions and the coronary bypass procedure |
+| [`or_scene.py`](or_scene.py), [`environment/`](environment/) | Operating-room scene, instruments, and viewer controls |
+| [`motion_log.py`](motion_log.py), [`aiven_store.py`](aiven_store.py) | Scoring, recording, replay, and optional sync |
+| [`coach.py`](coach.py), [`gemma_review.py`](gemma_review.py), [`gemini_voice.py`](gemini_voice.py) | Visual, voice, and text coaching |
+| [`SIMULATOR.md`](SIMULATOR.md) | Full simulator guide |
 
 <details>
 <summary><strong>Other prototypes, assets, and licensing</strong></summary>
 
-- [`surgical-training-simulator/`](surgical-training-simulator/) and [`surgical-training-simulator-dashboard/`](surgical-training-simulator-dashboard/) have their own READMEs and dependencies. The dashboard variant documents an optional database-backed session history.
-- [`surgisense-design/`](surgisense-design/) and [`surgisense-website/`](surgisense-website/) are alternate browser prototypes.
-- [`telepharm.py`](telepharm.py), [`hotcell_scene.xml`](hotcell_scene.xml), and [`arduino_knob.ino`](arduino_knob.ino) belong to a separate hot-cell simulation. Run `python telepharm.py --mock` from the workspace root for keyboard input. The optional serial knob path uses `pyserial`.
-- This workspace has no root license file. The bundled Inter font has its own [Open Font License](surgisense-workbench/inter-OFL.txt).
+- [`surgisense-design/`](surgisense-design/) contains the static workstation and analysis designs.
+- [`assets/heart-nih3d/`](assets/heart-nih3d/) contains the NIH 3D heart model, meshes, and materials.
+- [`environment/README.txt`](environment/README.txt) documents the cardiac operating-room scene and its integration.
 
 </details>
 
@@ -273,14 +255,14 @@ flowchart LR
 
 | Symptom | Check |
 | --- | --- |
-| `ModuleNotFoundError` | Install packages with the same Python executable that runs `hand_lab.py`. For `.cmd` launchers, check `Get-Command python`. |
-| The viewer fails to create a render context | Use a Windows desktop session with working OpenGL graphics. Run `python hand_lab.py --snapshot telepharm-preview.png` with the configured interpreter to test the practice-pad renderer. |
-| The glove stays on **Waiting** | Check the USB connection, the SDK license and process, and the `--hand` setting. If the launcher started the driver, inspect `surgery-sdk.err.log` in `%TEMP%`. |
-| The avatar moves unexpectedly | Hold the hand flat and recalibrate with <kbd>K</kbd> while the stream is active. Press <kbd>C</kbd> if you also need to park the tool and recenter the hand. |
-| <kbd>V</kbd> cannot open the microphone | Check `sounddevice`, the Windows default recording device, and microphone permissions. With voice mode enabled, you can still type in the coach panel. |
-| The coach reports an API error | Check that the key has access to the model configured in the coach module and that the machine can reach the Gemini API. |
-| A run is missing from history | Perform a recorded action, then press <kbd>R</kbd> or close the guided workstation normally. The scripted pad and browser sample use separate entry points. |
-| The browser link shows HTML source | Open the local `index.html` file in a browser so it can load its neighboring scripts and styles. |
+| `ModuleNotFoundError` | Install `requirements.txt` using the same virtual environment that launches `surgical_suturing_guided.py`. |
+| The viewer fails to create a render context | Run in a desktop session with working OpenGL graphics. On macOS, launch with `mjpython`. |
+| The Procedures window closed | Open **Equality** in the viewer and click **Procedures**, or press <kbd>P</kbd> to cycle through exercises. |
+| The glove stays on **Waiting** | Check the USB connection, Device SDK, and hand solver stream on port `12277`. |
+| The glove points the wrong way | Press <kbd>H</kbd> in the viewer and rest your hands palm-down with fingers toward the monitor. |
+| <kbd>V</kbd> cannot open the microphone | Install `requirements-ai.txt` and check the current default input device and microphone permissions. |
+| The coach reports an API error | Check the credentials for the selected backend and network access to its endpoint. |
+| Autopilot has no replay | Complete an attempt in the same procedure so a recording is available. |
 
 </details>
 
