@@ -21,6 +21,7 @@ from bypass import STITCHES_PER_ANASTOMOSIS
 import motion_log
 import or_scene
 from environment.or_controls import EnvironmentControls, heart_home   # the operating room
+from glove_suture import GloveSuture
 from procedures import DEFAULT, PROCEDURES, from_site, make_procedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
                       add_capsule, add_geom, build_model, draw_monitor, make_tissue, show_site,
@@ -540,6 +541,7 @@ class CuttingStation:
         reach = .004 if self.procedure is not None else max(.004, self.site.bite_guide*.9)
         self.edge_reach = reach                                   # forceps grip to needle pass
         self.steady_reach = max(.012, self.site.half*.8)          # steadying hand to blade
+        self.guide = GloveSuture(self) if self.task == "glove" else None   # hands-only suturing
 
     # --- small helpers ---------------------------------------------------------------
     @property
@@ -671,6 +673,8 @@ class CuttingStation:
             else:
                 self.cut(hand, None)
         self.check_pull()
+        if self.guide is not None:
+            self.guide.update()
 
         side, _ = self.plan()
         if side != self.need:          # keyboard control follows the step's hand
@@ -758,9 +762,11 @@ class CuttingStation:
         if code == ord("R"):
             self.reset()
             return
-        if code == RESET_HANDS:
+        if code == RESET_HANDS or (code == RESET_TOOLS and self.guide is not None):
             self.reset_hands()
             return
+        if self.guide is not None and code not in (BOTH_HANDS, *SELECT_HAND.values(), *MOVES):
+            return      # hands-only suturing: the tools stay in hand (arrows still nudge a hand)
         if code == RESET_TOOLS:
             self.park_all()
             self.rest = [(position.copy(), TRAY_DIRECTION.copy()) for position in TOOL_HOME]
@@ -822,6 +828,8 @@ class CuttingStation:
                 hand.tool_pose = self.pose_for_tool(hand)
         if self.needle_grasp is not None and not self.pulled:
             self.needle_grasp = None       # the forceps let go of the needle
+        if self.guide is not None:
+            self.guide.reset_hands()
         self.note("reset_hands")
         self.inform("Hands back to their start")
 
@@ -836,6 +844,9 @@ class CuttingStation:
             hand.guide_lower_steps = 0
         if self.procedure is not None:
             self.procedure = make_procedure(self.task, self.tissue)
+        if self.guide is not None:
+            self.guide = GloveSuture(self)
+            self.reset_hands()
         self.note("reset")
         self.inform("Repair cleared")
 
@@ -1145,6 +1156,8 @@ class CuttingStation:
                 return f"G set down the {hand.tool}, then {index + 1} + G ({name})"
             return f"{index + 1} then G ({name})"
 
+        if self.guide is not None:
+            return self.guide.plan()
         right = self.hands["right"]
         head = "" if self.procedure is None else self.procedure.head()
         if self.procedure is not None and self.procedure.done:
@@ -1229,6 +1242,8 @@ class CuttingStation:
             return out
 
         right = self.hands["right"]
+        if self.guide is not None:
+            return self.guide.checklist()
         if self.task == "free":
             return [(" ", "No set order: cut and stitch anywhere"),
                     (" ", f"{len(self.stitches)} stitches, {len(self.marks)} cut segments")]
@@ -1292,7 +1307,7 @@ class CuttingStation:
         side, text = self.plan()
         if short and self.procedure is not None and self.procedure.head():
             text = text.replace(self.procedure.head(), "", 1)
-        if side is not None and side != self.active and not self.both:
+        if side is not None and side != self.active and not self.both and self.guide is None:
             # Z or a double-click put the keys on the other hand: the step's keys would go there
             return (f"{side.capitalize()} hand next, but the keys move the {self.active} hand: "
                     f"press Z (or double-click the {side} hand)")
@@ -1375,6 +1390,8 @@ class CuttingStation:
             draw_geom(scene, ellipse, size, pos, matrix, material)
         if self.procedure is not None:
             self.procedure.draw(scene, self.clock)
+        if self.guide is not None:
+            self.guide.draw(scene, self.clock)
         for segment in self.marks:
             for size, pos, matrix, material in segment:
                 draw_geom(scene, ellipse, size, pos, matrix, material)
@@ -1496,6 +1513,8 @@ class Session:
         st = self.station
         if st.procedure is not None:
             return st.procedure.done
+        if st.guide is not None:
+            return st.guide.done
         if st.task in ("free", "stitch"):
             return False       # free practice and free stitching end when the trainee starts over
         return len(st.stitches) >= st.site.stitch_slots
@@ -1881,6 +1900,10 @@ def display(gloves, preview, procedure):
                 pressed = [key for key in pressed if key != ord("H")]
                 poses, status = glove_poses(gloves, session.station.hands, preview, now, reset_heading)
                 live = status.endswith("live") or "glove live" in status
+                if session.station.guide is not None and status != last_status:
+                    # Hands-only suturing: a glove came in or its direction locked, so the hand
+                    # jumped; bring the tools back above the cut (a recorded key: replays match).
+                    pressed.append(RESET_HANDS)
                 with controls.heart_at_home(viewer):     # tissue queries with the heart in place
                     drawn = session.step(now, poses, pressed, held, live)
                 picture["drawn"] = drawn

@@ -25,6 +25,7 @@ go to the next one. `--procedure` picks where to start:
     mjpython surgical_suturing_guided.py --procedure heart-suture     # heart laceration
     mjpython surgical_suturing_guided.py --procedure heart-bypass     # coronary artery bypass graft
     mjpython surgical_suturing_guided.py --procedure skin-stitch      # free stitching, prompted (also heart-stitch)
+    mjpython surgical_suturing_guided.py --procedure skin-gloves      # hands-only suturing: gloves, no keys
     mjpython surgical_suturing_guided.py --procedure skin-free        # free practice (also heart-free)
 
 For live tracking, start the Rokoko Device SDK driver in one Terminal:
@@ -62,6 +63,23 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 | Start over | R, or the Clear repair button in the same Equality section: the attempt so far is scored and saved, then the site starts fresh with the tools back in the trays |
 | Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
 | AI coach | I opens the assistant window (typed questions), V turns the voice coach on or off, B asks Gemma for a review (also buttons in the Equality section) |
+
+## Hands-only suturing (gloves, no keys)
+
+**Skin: hands-only suturing** (`--procedure skin-gloves`) is the telemetry showcase: the cut on
+the chest is already there, the needle holder is in the right hand and the forceps in the left,
+both just above the cut. Six stitches go along the cut, and no key is needed:
+
+1. The next hole glows yellow (with a faint yellow zone around it). Move the needle tip down
+   onto it; within 15 mm it snaps into the hole and the needle goes in.
+2. Move the right hand across the cut: the needle follows its curve under the skin and comes
+   out of the far hole (yellow dots show the way; the bottom line shows the percentage).
+3. Lift the right hand: the thread is pulled through and the stitch is tied.
+
+Then the next hole lights up; after the sixth stitch the showcase is complete. The bottom
+line always says the movement to make and how far the needle is from the hole. When a glove
+comes in or its direction locks, the tools go back above the cut. Recordings, scoring and the
+autopilot work as for the other procedures (code: `glove_suture.py`).
 
 ## Two-handed technique
 
@@ -163,6 +181,8 @@ this, recording, scoring and the autopilot still work locally.
   `environment/README.txt`. Recordings made since the room carry `"scene": "or-room"`;
   older skin recordings (flat pad) are kept but not replayed by the autopilot.
 - `bypass.py`: the guided coronary bypass procedure (targets, steps, graft).
+- `glove_suture.py`: hands-only suturing (six highlighted stitches driven by the gloves alone).
+- `procedures.py`: the procedures in the dropdown and the incision task.
 - `motion_log.py`: recording, task scoring, autopilot replay and the robot trajectory export.
 - `aiven_store.py`: local-first storage synced to Aiven PostgreSQL, and Kafka telemetry;
   `telemetry_monitor.py` follows the telemetry live.

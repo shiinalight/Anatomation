@@ -605,6 +605,8 @@ def _scene_xml():
     <material name="sponge" rgba=".93 .92 .88 1" specular=".05"/>
     <material name="target" rgba=".95 .93 .85 1" specular=".2"/>
     <material name="button_next" rgba=".3 1 .45 1" emission=".8"/>
+    <material name="highlight" rgba="1 .86 .1 1" emission=".9"/>
+    <material name="highlight_zone" rgba="1 .86 .1 .16" emission=".5"/>
     <material name="graft" rgba=".72 .82 .92 1" specular=".6" shininess=".7"/>
     <material name="graft_perfused" rgba=".70 .08 .10 1" specular=".8" shininess=".85"/>
     <material name="wound" rgba=".36 .03 .04 1" specular=".95" shininess=".95"/>
