@@ -59,7 +59,7 @@ The **Anatomation | Procedures** window lists the available exercises and tracks
 | --- | --- | --- |
 | Practice suturing on skin | [Desktop workstation](#launch-the-desktop-workstation) | Python 3.11 with Tk and working OpenGL |
 | Try a heart procedure | [Launch modes](#launch-modes) | The same desktop setup |
-| Explore the SurgiSense designs | [Browser workbench](#browser-workbench) | The static design previews in this repository |
+| Explore the Anatomation designs | [Browser workbench](#browser-workbench) | The static design previews in this repository |
 | Use gloves or a hosted coach | [Live glove and AI coaching](#live-glove-and-ai-coaching) | Rokoko Device SDK and hand solver for live tracking, or hosted coaching credentials |
 
 ### Launch the desktop workstation
@@ -151,7 +151,7 @@ The score describes performance within the simulated exercise.
 
 ## Browser workbench
 
-Explore the [SurgiSense design previews](surgisense-design/) for the browser workstation and analysis layouts. The desktop simulator writes its own attempt summaries and recordings to `training-data/`.
+Explore the [Anatomation design previews](surgisense-design/) for the browser workstation and analysis layouts. The desktop simulator writes its own attempt summaries and recordings to `training-data/`.
 
 ## Live glove and AI coaching
 
