@@ -70,11 +70,13 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 the chest is already there, the needle holder is in the right hand and the forceps in the left,
 both just above the cut. Six stitches go along the cut, and no key is needed:
 
-1. The next hole glows yellow (with a faint yellow zone around it). Move the needle tip down
-   onto it; within 15 mm it snaps into the hole and the needle goes in.
-2. Move the right hand across the cut: the needle follows its curve under the skin and comes
-   out of the far hole (yellow dots show the way; the bottom line shows the percentage).
-3. Lift the right hand: the thread is pulled through and the stitch is tied.
+1. The next hole glows yellow, with a yellow catch zone (3 cm around it, 2.5 cm high). Lower
+   the needle toward it: within 7 cm sideways a magnet draws the tip over the hole, and in the
+   catch zone it snaps in and the needle goes in.
+2. Move the right hand a little (2.5 cm, any direction; across the cut is the natural one):
+   the needle follows its curve under the skin and comes out of the far hole (yellow dots
+   show the way; the bottom line shows the percentage).
+3. Lift the right hand 3 cm: the thread is pulled through and the stitch is tied.
 
 Then the next hole lights up; after the sixth stitch the showcase is complete. The bottom
 line always says the movement to make and how far the needle is from the hole. When a glove
