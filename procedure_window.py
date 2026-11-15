@@ -12,7 +12,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from assistant_window import WindowProcess
+from assistant_window import FloatOverFullScreen, WindowProcess
 
 
 class ProcedureClient(WindowProcess):
@@ -35,7 +35,6 @@ class ProcedureWindow:
         self.root = tk.Tk()
         self.root.title("SurgiSense | Procedures")
         self.root.geometry("380x330+40+80")
-        self.root.attributes("-topmost", True)
         self.inbox = queue.SimpleQueue()
         self.keys, self.labels, self.current = [], [], None
 
@@ -53,6 +52,7 @@ class ProcedureWindow:
                       anchor="w", pady=(8, 0))
         threading.Thread(target=self._read, daemon=True).start()
         self.root.after(100, self._apply)
+        self.floating = FloatOverFullScreen(self.root)     # over a full-screen viewer too
 
     def _read(self):
         for line in sys.stdin:
@@ -68,6 +68,9 @@ class ProcedureWindow:
             if message is None:
                 self.root.destroy()
                 return
+            if "raise" in message:
+                self.floating.bring_forward()
+                continue
             pairs = message.get("procedures", [])
             if [k for k, _ in pairs] != self.keys:
                 self.keys = [k for k, _ in pairs]

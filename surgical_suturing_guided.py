@@ -1785,6 +1785,8 @@ def display(gloves, preview, procedure):
                 picker = ProcedureClient(PROCEDURES.values(), session.procedure.key)
             except OSError as error:
                 print(f"Procedures window unavailable ({error}); use P to cycle", flush=True)
+        else:
+            picker.show()               # already open (maybe behind the viewer): bring it forward
 
     open_picker()
     print("Two hands: the keyboard moves the hand the next step needs (green cuff); Z swaps it.\n"

@@ -89,6 +89,8 @@ class Coach:
         if assistant_clicked and (self.window is None or not self.window.alive):
             from assistant_window import AssistantClient
             self.window = AssistantClient()
+        elif assistant_clicked:
+            self.window.show()          # already open (maybe behind the viewer): bring it forward
         if self.voice is not None:
             question = self.window.question() if self.window is not None else None
             if question:
