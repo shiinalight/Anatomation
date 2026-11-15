@@ -12,7 +12,10 @@ The right hand does it all, in six steps (the left hand rests):
   5. pick    the graft's free end glows yellow: reach for it.
   6. attach  carry it to the opening in the aorta: it is sewn on and the graft fills with blood.
 
-The catch works as in glove_suture.py: a magnet draws the tip over the target sideways while
+As in glove_suture.py, the gloves only turn about the wrist: each step starts with the tip
+(and the graft, when carried) gliding to just above its yellow point, so every step is a
+wrist movement; nothing starts before the glove is live and its direction locked. The catch
+works as in glove_suture.py: a magnet draws the tip over the target sideways while
 the trainee controls the height, and the catch zone is shown as a soft yellow disc. The geometry
 (marked lines, graft path, anastomosis hoods and stitch rings) comes from bypass.BypassProcedure.
 Everything is driven by the glove poses, so recordings and the autopilot replay it exactly.
@@ -22,6 +25,7 @@ import numpy as np
 import mujoco as mj
 
 from bypass import AORTA, CORONARY, GRAFT_RADIUS, STITCHES_PER_ANASTOMOSIS, BypassProcedure
+from glove_suture import settle
 from or_scene import HEART_RATE, add_capsule, add_geom
 
 UP = np.array([0., 0., 1.])
@@ -32,8 +36,7 @@ MAGNET_PULL = .06
 SHOW_LINE = .05          # the cut line lights up when the blade is this close
 CUT_TRAVEL = .025        # hand movement (any direction) that runs the blade along the whole line
 CUT_DEPTH = .0015
-START_LIFT = .06         # the scalpel starts this far above the coronary artery
-HAND_LIFT = .04          # the hand lifts this far when the scalpel goes back to the tray
+READY_LIFT = .035        # each step starts with the tip glided this far above its yellow point
 ARM = 1.5                # a snap point arms once the tip has been this many catch zones away
 GRAB_TIME = .4           # the graft end glides into the hand over this time (s)
 SEW_TIME = 1.2           # an anastomosis is sewn on over this time (s)
@@ -74,8 +77,11 @@ class GloveBypass:
         self.anchor = None
         self.last_cut = None          # previous point of the blade on the line (wound segments)
         self.segments = 0
-        self.placed = set()
         self.armed = False            # the hand has been outside the catch zone in this step
+        self.settling = True          # the tip glides above the step's yellow point first
+        self.glide = None
+        self.ready = None             # glove live and locked? None: not told yet (the display says)
+        self.started = False
         self.carried = None           # "heel" or "free" while the graft end is in the hand
         self.grabbed_at, self.grab_from = None, None
         self.sewn_at = {}             # vessel name -> clock when the graft was attached
@@ -107,7 +113,6 @@ class GloveBypass:
         if hand.held == 0:                                # the scalpel goes back to the tray
             st.rest[0] = (self.blade_home[0].copy(), self.blade_home[1].copy())
             hand.held = hand.tool_pose = None
-            hand.offset += UP*HAND_LIFT                   # the empty hand comes up off the heart
             st.events.append("setdown")
         if want == 0 and st.holder(0) is None:
             hand.held = hand.selected = 0
@@ -124,11 +129,6 @@ class GloveBypass:
             return self.heel_rest if what == "heel" else self.free_rest
         return self.bp._surface(what.centre, GRAFT_RADIUS*.6)
 
-    def place(self, hand):
-        """The hand (or its scalpel) just above the current step's target, to one side."""
-        start = self.target() + UP*START_LIFT + np.array([0., -.03, 0.])
-        self.shift(hand, start - self.tip(hand))
-        self.placed.add(hand.side)
 
     def catch(self, hand, target):
         """The magnet and the catch zone: True when the tip is caught on `target`."""
@@ -154,11 +154,22 @@ class GloveBypass:
         if hand.pose is None:
             return
         self.equip(hand)
-        if hand.side not in self.placed:
-            self.place(hand)
         if self.done:
             return
         kind, what, _ = STAGES[self.stage]
+        if self.phase == "reach" and self.settling:
+            # The gloves only turn about the wrist: each step starts with the tip (and anything
+            # in the hand) brought just above its yellow point; bending the wrist does the rest.
+            self.glide = 0 if self.glide is None else self.glide + 1
+            self.settling = not settle(hand, self.tip(hand), self.target() + UP*READY_LIFT, self.st,
+                                       self.glide)
+            if not self.settling:      # it ended above the catch zone: the snap point is armed
+                self.glide, self.armed = None, True
+            self.distance = float(np.linalg.norm(self.target() - self.tip(hand)))
+            return
+        if not self.ready:
+            return
+        self.started = True
         if kind == "cut":
             self.update_cut(hand, what)
         elif self.catch(hand, self.target()):
@@ -206,6 +217,7 @@ class GloveBypass:
         self.stage += 1
         self.phase, self.progress, self.distance = "reach", 0.0, None
         self.armed = False
+        self.settling = True
         if self.done:
             self.finished_at = self.st.clock
             self.st.events.append("complete")
@@ -214,7 +226,7 @@ class GloveBypass:
 
     def reset_hands(self):
         """Reset hands: the hand back above the current target (a cut starts its line again)."""
-        self.placed.clear()
+        self.settling = True
         if self.phase == "cut":
             self.phase, self.progress = "reach", 0.0
 
@@ -224,17 +236,22 @@ class GloveBypass:
             return None, "Bypass complete: the graft is perfused. Clear repair to start again"
         if self.st.hands["right"].pose is None:
             return "right", "Right glove not tracked: hold your right hand where the gloves see it"
+        if not self.ready:
+            return "right", ("Rest your right hand flat, fingers to the screen, to "
+                             + ("continue" if self.started else "start"))
+        if self.settling:
+            return "right", "Relax your wrist: moving into place"
         kind, what, _ = STAGES[self.stage]
         n = f"Step {self.stage + 1}/{len(STAGES)}"
         far = "" if self.distance is None else f" ({self.distance*1000:.0f} mm)"
         if kind == "cut" and self.phase == "cut":
-            return "right", f"{n}: cut along the yellow line: move your right hand ({self.progress:.0%})"
+            return "right", f"{n}: cut along the yellow line: turn your wrist ({self.progress:.0%})"
         if kind == "cut":
-            return "right", f"{n}: lower the scalpel onto the yellow point on the {what.name}{far}"
+            return "right", f"{n}: bend your wrist down: scalpel onto the {what.name}{far}"
         if kind == "pick":
             end = "end of the vein graft" if what == "heel" else "free end of the graft"
-            return "right", f"{n}: reach for the yellow {end}{far}"
-        return "right", f"{n}: carry the graft to the yellow point on the {what.name} opening{far}"
+            return "right", f"{n}: bend your wrist down: take the yellow {end}{far}"
+        return "right", f"{n}: bend your wrist down: graft onto the {what.name} opening{far}"
 
     def checklist(self):
         rows = []

@@ -66,6 +66,8 @@ RESET_HANDS = 0x10000     # from the panel's Reset hands button (a code no keybo
 BOTH_HANDS = ord("Y")     # toggles moving both hands together (also the Both hands button)
 SELECT_HAND = {"left": 0x10002, "right": 0x10003}   # double-click on a hand in the viewer
 RESET_TOOLS = 0x10004     # the room's Reset instruments button: every tool back in its tray
+GLOVES_READY = 0x10005    # hands-only modes: the right glove is live with its direction locked
+GLOVES_WAIT = 0x10006     # ... or no longer (the steps pause); both sent by the display
 PULL_HEIGHT = .009        # forceps lift that pulls the suture through after the needle exits
 THROWS = ("double wrap", "single wrap, reversed", "single wrap, squares the knot")
 # GLFW key code -> (axis, metres per tap). Holding a key moves at MOVE_SPEED * step / s.
@@ -765,6 +767,10 @@ class CuttingStation:
         hand = self.hands[self.active]
         if code == ord("R"):
             self.reset()
+            return
+        if code in (GLOVES_READY, GLOVES_WAIT):
+            if self.guide is not None:
+                self.guide.ready = code == GLOVES_READY
             return
         if code == RESET_HANDS or (code == RESET_TOOLS and self.guide is not None):
             self.reset_hands()
@@ -1904,10 +1910,14 @@ def display(gloves, preview, procedure):
                 pressed = [key for key in pressed if key != ord("H")]
                 poses, status = glove_poses(gloves, session.station.hands, preview, now, reset_heading)
                 live = status.endswith("live") or "glove live" in status
-                if session.station.guide is not None and status != last_status:
-                    # Hands-only suturing: a glove came in or its direction locked, so the hand
-                    # jumped; bring the tools back above the cut (a recorded key: replays match).
-                    pressed.append(RESET_HANDS)
+                if session.station.guide is not None and (status != last_status or
+                                                          session.station.guide.ready is None):
+                    # Hands-only modes: a glove came in or its direction locked, so the hand
+                    # jumped: bring the tools back into place, and run the steps only while the
+                    # right glove is live and locked (recorded keys: replays match).
+                    ready = (status in ("Both gloves live", "Keyboard practice")
+                             or status.startswith("Right glove live"))
+                    pressed += [RESET_HANDS, GLOVES_READY if ready else GLOVES_WAIT]
                 with controls.heart_at_home(viewer):     # tissue queries with the heart in place
                     drawn = session.step(now, poses, pressed, held, live)
                 picture["drawn"] = drawn

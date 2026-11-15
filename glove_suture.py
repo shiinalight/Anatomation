@@ -3,6 +3,9 @@
 The trainee starts with the needle holder in the right hand and the forceps in the left,
 both just above the cut on the chest. Six stitches go along the laceration, one at a time:
 
+  0. the needle glides to just above the next hole (the gloves only turn about the wrist, so
+            every movement below is a wrist movement), and nothing starts before the glove is
+            live and its direction locked (GLOVES_READY, sent by the display).
   1. reach  the next entry hole glows yellow; lower the needle toward it. Within MAGNET_XY the
             tip is drawn over the hole; in the catch zone (SNAP_XY around it, SNAP_Z above) it
             snaps in and the needle goes in.
@@ -31,10 +34,25 @@ MAGNET_PULL = .06        # fraction of the remaining sideways gap closed each fr
 DRIVE_TRAVEL = .025      # hand movement (any direction) that takes the needle through
 PULL_TRAVEL = .03        # hand lift that pulls the thread through
 NEEDLE_DEPTH = .005      # deepest point of the needle's path under the skin
-START_LIFT = .07         # the tools start this far above the cut
+START_LIFT = .07         # the forceps start this far above the cut
+READY_LIFT = .04         # each stitch starts with the needle glided this far above its hole
+SETTLE = .2              # fraction of the way to that ready point covered each frame
+SETTLE_NEAR = .003       # the glide ends this close (a shaky hand never holds closer) ...
+SETTLE_FRAMES = 30       # ... or after this many frames at most
 UP = np.array([0., 0., 1.])
 TOOLS = {"right": 1, "left": 2}     # needle holder, forceps
 PHASES = ("reach", "drive", "pull")
+
+
+def settle(hand, tip, goal, station, frames, rate=SETTLE):
+    """Glide the drawn hand so `tip` approaches `goal`; True once it is there (or after
+    SETTLE_FRAMES: `frames` is how many frames this glide has run)."""
+    gap = goal - tip
+    done = float(np.linalg.norm(gap)) < SETTLE_NEAR or frames >= SETTLE_FRAMES
+    hand.offset += gap if done else gap*rate
+    if hand.held is not None:
+        hand.tool_pose = station.pose_for_tool(hand)
+    return done
 
 
 class GloveSuture:
@@ -52,6 +70,10 @@ class GloveSuture:
         self.distance = None          # needle tip to the yellow hole (reach)
         self.anchor = None            # raw glove tip when the phase began
         self.placed = set()           # hands already brought above the cut
+        self.settling = True          # the needle glides above the next hole (no catch meanwhile)
+        self.glide = None             # frames the glide has run
+        self.ready = None             # glove live and locked? None: not told yet (the display says)
+        self.started = False
         self.finished_at = None
 
     @property
@@ -87,7 +109,11 @@ class GloveSuture:
                 hand.pinch_finger = None        # held whatever the fingers do
                 hand.tool_pose = st.pose_for_tool(hand)
             if side not in self.placed and hand.held is not None:
-                self.place(hand)
+                if side == "right":
+                    self.settling = True          # glides there instead (see update)
+                    self.placed.add(side)
+                else:
+                    self.place(hand)
 
     def lock(self, hand, point):
         """Move the drawn hand so the needle tip sits on `point` (the raw glove keeps going)."""
@@ -112,6 +138,18 @@ class GloveSuture:
         if self.done or hand.pose is None or hand.held != 1 or hand.tool_pose is None:
             return
         entry, exit_ = self.holes[self.k]
+        if self.phase == "reach" and self.settling:
+            # The gloves only turn about the wrist: each stitch starts with the needle brought
+            # just above its hole, so bending the wrist down is all it takes to catch it.
+            self.glide = 0 if self.glide is None else self.glide + 1
+            self.settling = not settle(hand, st.active_tip(hand), entry + UP*READY_LIFT, st, self.glide)
+            if not self.settling:
+                self.glide = None
+            self.distance = float(np.linalg.norm(st.active_tip(hand) - entry))
+            return
+        if not self.ready:
+            return
+        self.started = True
         if self.phase == "reach":
             tip = st.active_tip(hand)
             gap = entry - tip
@@ -152,6 +190,7 @@ class GloveSuture:
                 st.events.append("tie")
                 self.k += 1
                 self.phase, self.progress, self.distance = "reach", 0.0, None
+                self.settling = True
                 if self.done:
                     self.finished_at = st.clock
                     st.events.append("complete")
@@ -159,6 +198,7 @@ class GloveSuture:
     def reset_hands(self):
         """Reset hands: both tools back above the cut (the stitch in progress starts again)."""
         self.placed.clear()
+        self.settling = True
         if self.phase != "reach":
             self.phase, self.progress = "reach", 0.0
 
@@ -168,14 +208,18 @@ class GloveSuture:
             return None, f"All {STITCHES} stitches done: showcase complete. Clear repair to start again"
         if self.st.hands["right"].pose is None:
             return "right", "Right glove not tracked: hold your right hand where the gloves see it"
+        if not self.ready:
+            return "right", ("Rest your right hand flat, fingers to the screen, to "
+                             + ("continue" if self.started else "start"))
+        if self.settling:
+            return "right", "Relax your wrist: moving into place"
         n = f"Stitch {self.k + 1}/{STITCHES}"
         if self.phase == "reach":
             far = "" if self.distance is None else f" ({self.distance*1000:.0f} mm)"
-            return "right", f"{n}: lower the needle onto the yellow point{far}"
+            return "right", f"{n}: bend your wrist down: needle onto the yellow point{far}"
         if self.phase == "drive":
-            return "right", (f"{n}: push the needle through: move your right hand across the cut "
-                             f"({self.progress:.0%})")
-        return "right", f"{n}: pull the thread through: lift your right hand up ({self.progress:.0%})"
+            return "right", f"{n}: push the needle through: turn your wrist ({self.progress:.0%})"
+        return "right", f"{n}: pull the thread through: bend your wrist up ({self.progress:.0%})"
 
     def checklist(self):
         rows = []

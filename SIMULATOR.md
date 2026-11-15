@@ -65,6 +65,20 @@ a keyboard-driven hand takes its place, so you can also work with one glove.
 | Autopilot | Autopilot button (Equality section): replays the best recorded attempt at this site; turn it off to take over |
 | AI coach | I opens the assistant window (typed questions), V turns the voice coach on or off, B asks Gemma for a review (also buttons in the Equality section) |
 
+## Hands-only modes: wrist movements only
+
+The gloves report how the hand turns and how the fingers bend, not where the arm is: the
+wrist stays where it is. So in the two hands-only modes below, every step is done by turning
+the wrist, never by moving the arm or pressing keys:
+
+- Nothing starts until the right glove is live and its direction is locked (rest the hand flat,
+  fingers to the screen). If the glove drops out, the steps pause and continue when it is back.
+- At the start of every step the tool (and the graft, when carried) glides to just above the
+  next yellow point while the prompt says "Relax your wrist: moving into place".
+- Then: bend the wrist down to catch the point, turn it a little to cut or push the needle,
+  bend it up to pull the thread. A wrist-only test trainee finishes both modes with at most
+  about 8 degrees side to side and 12 degrees up or down.
+
 ## Hands-only suturing (gloves, no keys)
 
 **Skin: hands-only suturing** (`--procedure skin-gloves`) is the telemetry showcase: the cut on
