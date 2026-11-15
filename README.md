@@ -4,11 +4,11 @@
 
 # Anatomation
 
-**The TelePharm virtual surgical training workstation**
+**The Anatomation virtual surgical training workstation**
 
 Practice two-handed incisions, suturing, and coronary bypass in a virtual cardiac operating room. Review your scores and replay your best recorded attempt.
 
-**[Take a look](#take-a-look)** · **[Try a keyboard run](#first-practice-run)** · **[Run locally](#quick-start)** · **[Explore SurgiSense](#browser-workbench)**
+**[Take a look](#take-a-look)** · **[Try a keyboard run](#first-practice-run)** · **[Run locally](#quick-start)** · **[Explore Anatomation](#browser-workbench)**
 
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-FF6300?style=flat-square&logo=python&logoColor=FFFFFF)
 ![MuJoCo simulation](https://img.shields.io/badge/MuJoCo-Simulation-2847F4?style=flat-square&labelColor=080808)
@@ -34,15 +34,10 @@ Control two hands with the keyboard or Rokoko Smartgloves. The procedure checkli
 
 ### Follow the procedure
 
-The **SurgiSense | Procedures** window lists the available exercises and tracks the current one. In this keyboard run, the needle holder and forceps are in place and the checklist has advanced to the first stitch.
+The **Anatomation | Procedures** window lists the available exercises and tracks the current one. In this keyboard run, the needle holder and forceps are in place and the checklist has advanced to the first stitch.
 
 [![The current Procedures window with Skin: suture the laceration selected, both instruments checked off, and the steps for the first stitch.](docs/readme/current-procedures.jpg)](docs/readme/current-procedures.jpg)
 
-### A closer look in SurgiSense
-
-The SurgiSense analysis prototype shows how a pad map, session findings, and instrument measurements could appear in a browser workbench.
-
-[![Static SurgiSense browser analysis design with a top-down practice pad, session findings, and measurements.](docs/readme/anatomation-pad-map-prototype.webp)](surgisense-design/analysis-preview.png)
 
 <details>
 <summary><strong>More from the project gallery</strong></summary>
@@ -52,7 +47,7 @@ The SurgiSense analysis prototype shows how a pad map, session findings, and ins
 | [![Current NIH 3D heart model inside the chest retractor.](docs/readme/current-heart-suture.jpg)](docs/readme/current-heart-suture.jpg) | [![TelePharm mascot with a stitched heart and a smiling face.](docs/readme/anatomation-stitch-heart.webp)](stitch-heart-mascot.png) |
 | [NIH 3D model files](assets/heart-nih3d/) | [Mascot artwork](stitch-heart-mascot.png) |
 
-**SurgiSense workstation prototype**
+**Anatomation workstation prototype**
 
 [![Static browser workstation design with a practice-pad reference, procedure steps, and coaching panel.](docs/readme/anatomation-workstation-prototype.webp)](surgisense-design/dashboard-preview.png)
 
@@ -77,14 +72,14 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe surgical_suturing_guided.py --preview
 ```
 
-The **MuJoCo: Operating room** and **SurgiSense | Procedures** windows open with **Skin: suture the laceration** selected. Preview mode uses the keyboard for both hands. For macOS setup, see the [simulator guide](SIMULATOR.md#run-on-macos).
+The **MuJoCo: Operating room** and **Anatomation | Procedures** windows open with **Skin: suture the laceration** selected. Preview mode uses the keyboard for both hands. For macOS setup, see the [simulator guide](SIMULATOR.md#run-on-macos).
 
 ### Launch modes
 
 <details open>
 <summary><strong>Choose a procedure</strong></summary>
 
-Select an exercise in **SurgiSense | Procedures**, or press <kbd>P</kbd> in the viewer to cycle through the exercises. If you close the picker, click **Procedures** in the viewer’s **Equality** panel to reopen it.
+Select an exercise in **Anatomation | Procedures**, or press <kbd>P</kbd> in the viewer to cycle through the exercises. If you close the picker, click **Procedures** in the viewer’s **Equality** panel to reopen it.
 
 | Exercise | `--procedure` values |
 | --- | --- |
