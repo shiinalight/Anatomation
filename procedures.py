@@ -8,6 +8,8 @@ Each procedure is a site (where: skin or heart) plus a task (what):
             stitch technique prompted step by step
   glove     hands-only suturing: tools already in hand, six highlighted stitches done with the
             glove movements alone, no keys (see glove_suture.py)
+  glove-bypass  hands-only bypass: snap points for the scalpel, the graft and both
+            anastomoses, no keys (see glove_bypass.py)
   free      no prompts and no forced order; cutting needs no steadying hand
 """
 
@@ -37,6 +39,8 @@ PROCEDURES = {p.key: p for p in (
     Procedure("heart-suture", "Heart: suture the laceration", "heart", "suture"),
     Procedure("heart-bypass", "Heart: coronary artery bypass", "bypass", "bypass"),
     Procedure("heart-stitch", "Heart: free stitching", "heart", "stitch"),
+    Procedure("heart-gloves-bypass", "Heart: hands-only bypass (gloves, no keys)", "bypass",
+              "glove-bypass"),
     Procedure("heart-free", "Heart: free practice", "heart", "free"),
 )}
 DEFAULT = "skin-suture"

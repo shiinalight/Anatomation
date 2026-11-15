@@ -26,6 +26,7 @@ go to the next one. `--procedure` picks where to start:
     mjpython surgical_suturing_guided.py --procedure heart-bypass     # coronary artery bypass graft
     mjpython surgical_suturing_guided.py --procedure skin-stitch      # free stitching, prompted (also heart-stitch)
     mjpython surgical_suturing_guided.py --procedure skin-gloves      # hands-only suturing: gloves, no keys
+    mjpython surgical_suturing_guided.py --procedure heart-gloves-bypass  # hands-only bypass: gloves, no keys
     mjpython surgical_suturing_guided.py --procedure skin-free        # free practice (also heart-free)
 
 For live tracking, start the Rokoko Device SDK driver in one Terminal:
@@ -82,6 +83,26 @@ Then the next hole lights up; after the sixth stitch the showcase is complete. T
 line always says the movement to make and how far the needle is from the hole. When a glove
 comes in or its direction locks, the tools go back above the cut. Recordings, scoring and the
 autopilot work as for the other procedures (code: `glove_suture.py`).
+
+## Hands-only bypass (gloves, no keys)
+
+**Heart: hands-only bypass** (`--procedure heart-gloves-bypass`): the coronary bypass with snap
+points, done with the right hand alone and no key:
+
+1. **Cut the coronary artery**: the scalpel is in hand; a yellow point marks where the blade
+   goes, and the whole marked line turns yellow as the blade comes close. Lower the blade onto
+   the point (a magnet draws it over; it snaps in the yellow catch zone), then move the hand
+   a little: the blade runs along the line and opens the artery.
+2. **Pick up the graft**: the scalpel goes back to the tray and the hand lifts off the heart;
+   the end of the vein graft glows yellow. Reach for it: it snaps and glides into the hand.
+3. **Attach it to the coronary artery**: carry it to the yellow point on the opening; it snaps
+   on and is sewn on, stitch by stitch.
+4. **Cut the ascending aorta**: the scalpel is back in hand; the same as step 1.
+5. **Pick up the free end of the graft** (yellow).
+6. **Attach it to the aorta**: it is sewn on and the graft fills with blood and pulses.
+
+A snap point only catches after the hand has come toward it, never where the previous step
+left the hand. Code: `glove_bypass.py` (geometry from `bypass.py`).
 
 ## Two-handed technique
 
@@ -184,6 +205,7 @@ this, recording, scoring and the autopilot still work locally.
   older skin recordings (flat pad) are kept but not replayed by the autopilot.
 - `bypass.py`: the guided coronary bypass procedure (targets, steps, graft).
 - `glove_suture.py`: hands-only suturing (six highlighted stitches driven by the gloves alone).
+- `glove_bypass.py`: the hands-only bypass (snap points for the scalpel, graft and anastomoses).
 - `procedures.py`: the procedures in the dropdown and the incision task.
 - `motion_log.py`: recording, task scoring, autopilot replay and the robot trajectory export.
 - `aiven_store.py`: local-first storage synced to Aiven PostgreSQL, and Kafka telemetry;

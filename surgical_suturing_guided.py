@@ -21,6 +21,7 @@ from bypass import STITCHES_PER_ANASTOMOSIS
 import motion_log
 import or_scene
 from environment.or_controls import EnvironmentControls, heart_home   # the operating room
+from glove_bypass import GloveBypass
 from glove_suture import GloveSuture
 from procedures import DEFAULT, PROCEDURES, from_site, make_procedure
 from or_scene import (SITES, TABLE_MAX, TABLE_MIN, TRAY_TOP, WORK_TOP, Look, Sounds, add_bar,
@@ -499,6 +500,9 @@ class Hand:
         return "empty" if self.held is None else TOOL_NAMES[self.held].lower()
 
 
+GUIDES = {"glove": GloveSuture, "glove-bypass": GloveBypass}   # hands-only (telemetry) modes
+
+
 class CuttingStation:
     """Both hands' instruments, cutting and suturing on the tissue surface (via `tissue`),
     with the incision and stitch geometry of the chosen site.
@@ -541,7 +545,7 @@ class CuttingStation:
         reach = .004 if self.procedure is not None else max(.004, self.site.bite_guide*.9)
         self.edge_reach = reach                                   # forceps grip to needle pass
         self.steady_reach = max(.012, self.site.half*.8)          # steadying hand to blade
-        self.guide = GloveSuture(self) if self.task == "glove" else None   # hands-only suturing
+        self.guide = GUIDES[self.task](self) if self.task in GUIDES else None   # hands-only modes
 
     # --- small helpers ---------------------------------------------------------------
     @property
@@ -667,7 +671,7 @@ class CuttingStation:
                 gap = self.contact(hand) - hand.grip
                 if np.linalg.norm(gap[:2]) > .03 or gap[2] > .045:
                     hand.grip = None
-            if hand.held == 0:
+            if hand.held == 0 and self.guide is None:     # (a hands-only guide cuts by itself)
                 grip, direction = hand.tool_pose
                 self.cut(hand, grip + direction*TOOL_TIP[0])
             else:
@@ -845,7 +849,7 @@ class CuttingStation:
         if self.procedure is not None:
             self.procedure = make_procedure(self.task, self.tissue)
         if self.guide is not None:
-            self.guide = GloveSuture(self)
+            self.guide = type(self.guide)(self)
             self.reset_hands()
         self.note("reset")
         self.inform("Repair cleared")
