@@ -248,7 +248,7 @@ flowchart LR
 
 </details>
 
-## Troubleshooting
+##  Troubleshooting
 
 <details>
 <summary><strong>Viewer startup, tracking, microphone, or missing sessions</strong></summary>
