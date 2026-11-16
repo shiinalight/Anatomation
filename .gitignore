@@ -1,8 +1,20 @@
+# Python
 .venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# macOS
 .DS_Store
+
+# Secrets: keys and certificates stay on each machine (see .env.example)
 .env
-aiven-ca.pem
+*.pem
+*.key
+*.cert
 kafka/
+Kafka/
+
+# Recorded attempts and logs (synced to Aiven, not to git)
 training-data/
 *.log
