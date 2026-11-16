@@ -4,67 +4,90 @@
 
 # Anatomation
 
-**The Anatomation virtual surgical training workstation**
+**Practise surgery with your own hands: a glove-tracked surgical simulator with an AI coach.**
 
-Practice two-handed incisions, suturing, and coronary bypass in a virtual cardiac operating room. Review your scores and replay your best recorded attempt.
+Cut, stitch and perform a coronary artery bypass in a virtual operating room. Rokoko gloves move the instruments, every attempt is scored, and an AI assistant tells you what to do next.
 
-**[Take a look](#take-a-look)** · **[Try a keyboard run](#first-practice-run)** · **[Run locally](#quick-start)** · **[Explore Anatomation](#browser-workbench)**
+## ▶ Watch the demo
 
+<a href="https://www.youtube.com/watch?v=FWhLL2QjWyk" title="Watch the Anatomation demo on YouTube">
+  <img src="docs/readme/demo-video.jpg" alt="Anatomation demo video: a hands-only coronary bypass on a virtual heart, driven by a trainee wearing Rokoko gloves. Click to watch on YouTube." width="100%">
+</a>
+
+<sub>Click the picture to watch on YouTube · <a href="https://www.youtube.com/watch?v=FWhLL2QjWyk">youtube.com/watch?v=FWhLL2QjWyk</a> · Junction 2026</sub>
+
+<br><br>
+
+**[Why](#why-anatomation)** · **[What you can practise](#what-you-can-practise)** · **[Quick start](#quick-start)** · **[Hands-only modes](#hands-only-modes-gloves-no-keys)** · **[AI coach and scoring](#scoring-replay-and-ai-coach)** · **[How it works](#how-it-works)**
+
+![MuJoCo 4](https://img.shields.io/badge/MuJoCo-4-2847F4?style=flat-square&labelColor=080808)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-FF6300?style=flat-square&logo=python&logoColor=FFFFFF)
-![MuJoCo simulation](https://img.shields.io/badge/MuJoCo-Simulation-2847F4?style=flat-square&labelColor=080808)
-![Rokoko Smartglove](https://img.shields.io/badge/Rokoko-Smartglove-526D00?style=flat-square&labelColor=080808)
-![Gemma and Gemini coaching](https://img.shields.io/badge/Gemma_%2B_Gemini-Optional_coaching-FF6300?style=flat-square&labelColor=080808)
+![Rokoko Smartgloves](https://img.shields.io/badge/Rokoko-Smartgloves-526D00?style=flat-square&labelColor=080808)
+![Gemini and Gemma](https://img.shields.io/badge/Gemini_%2B_Gemma-AI_coach-FF6300?style=flat-square&labelColor=080808)
+![Aiven](https://img.shields.io/badge/Aiven-PostgreSQL_%2B_Kafka-FF3554?style=flat-square&labelColor=080808)
 
 </div>
 
 ---
 
-## Take a look
+## Why Anatomation
 
-### At the operating table
+| The problem | What Anatomation does |
+| --- | --- |
+| **Surgeons can't practise enough.** Cadavers, animal models and operating-room time are expensive and scarce. | Unlimited practice of skin suturing, incisions and a full coronary bypass, at no extra cost per attempt. |
+| **Simulators don't feel like real hands.** A mouse, a keyboard or costly haptic hardware trains the wrong motion. | Motion-capture gloves turn your real wrist and finger movements into the instrument's movements. |
+| **Expert feedback is scarce and subjective.** A senior surgeon has to watch every attempt. | Every attempt is recorded and scored objectively: time, instrument travel, needle accuracy and refused actions. |
+| **Beginners get stuck.** It's easy to get lost in a complex procedure. | Step-by-step checklist, glowing yellow targets with snap points, and an AI assistant that answers "what do I do now?" in about a second. |
+| **Some procedures can't be rehearsed at all.** | A guided coronary artery bypass graft on a real anatomical heart model, in a full cardiac operating room. |
 
-Control two hands with the keyboard or Rokoko Smartgloves. The procedure checklist tracks each step, and the status overlay shows the instrument in each hand, stitch count, and the next action.
+## What you can practise
 
-[![Current heart suturing exercise showing two hands, the exposed NIH 3D heart, instrument trays, and the MuJoCo checklist.](docs/readme/current-heart-suture.jpg)](docs/readme/current-heart-suture.jpg)
+Pick a procedure from the **Procedures** window, which opens beside the simulator, or press <kbd>P</kbd> to move to the next one.
+
+| Procedure | `--procedure` | What you do |
+| --- | --- | --- |
+| Skin: incision | `skin-incision` | Steady the skin with the left hand and cut along the marked line |
+| Skin: suture the laceration | `skin-suture` | Five two-handed stitches with forceps and needle holder, each with an instrument tie (default) |
+| Skin: free stitching | `skin-stitch` | Stitch anywhere along the cut, as many stitches as you like, with each step prompted |
+| **Skin: hands-only suturing** | `skin-gloves` | Six highlighted stitches done with glove movements alone, **no keys** |
+| Heart: incision | `heart-incision` | Incision on the left ventricle |
+| Heart: suture the laceration | `heart-suture` | Repair a 3 cm laceration on the left ventricle |
+| Heart: coronary artery bypass | `heart-bypass` | Cut the coronary artery → sew on the graft → cut the aorta → sew on the other end |
+| Heart: free stitching | `heart-stitch` | Free stitching on the heart |
+| **Heart: hands-only bypass** | `heart-gloves-bypass` | The full bypass with snap points, right hand only, **no keys** (the one in the video) |
+| Skin / Heart: free practice | `skin-free`, `heart-free` | No prompts and no fixed order |
+
+Everything happens in a full cardiac operating room: a draped patient, an opened chest with a retractor, a heart-lung machine, an anaesthesia machine, surgical lights and live monitors. The heart is the NIH 3D anatomical model.
+
+### Take a look
+
+[![Heart suturing exercise showing two hands, the exposed NIH 3D heart, instrument trays, and the MuJoCo checklist.](docs/readme/current-heart-suture.jpg)](docs/readme/current-heart-suture.jpg)
 
 | The operating room | Skin suturing |
 | :---: | :---: |
-| [![Wide view of the current cardiac operating room with the draped patient, monitors, and perfusion equipment.](docs/readme/current-operating-room.jpg)](docs/readme/current-operating-room.jpg) | [![Keyboard practice with the left hand holding forceps and the right hand holding a needle holder at the skin station.](docs/readme/current-skin-suture.jpg)](docs/readme/current-skin-suture.jpg) |
-| The cardiac simulator’s table, equipment, and animated displays. | A laceration on the curved chest surface, with the instruments ready for the first stitch. |
+| [![Wide view of the cardiac operating room with the draped patient, monitors, and perfusion equipment.](docs/readme/current-operating-room.jpg)](docs/readme/current-operating-room.jpg) | [![Keyboard practice with the left hand holding forceps and the right hand holding a needle holder at the skin station.](docs/readme/current-skin-suture.jpg)](docs/readme/current-skin-suture.jpg) |
+| The table, the equipment and the animated displays. | A laceration on the curved chest, with the instruments ready for the first stitch. |
 
-### Follow the procedure
+The **Anatomation | Procedures** window lists the exercises and ticks off each step of the current one:
 
-The **Anatomation | Procedures** window lists the available exercises and tracks the current one. In this keyboard run, the needle holder and forceps are in place and the checklist has advanced to the first stitch.
-
-[![The current Procedures window with Skin: suture the laceration selected, both instruments checked off, and the steps for the first stitch.](docs/readme/current-procedures.jpg)](docs/readme/current-procedures.jpg)
-
-
-<details>
-<summary><strong>More from the project gallery</strong></summary>
-
-| Heart model | Stitch-heart mascot |
-| :---: | :---: |
-| [![Current NIH 3D heart model inside the chest retractor.](docs/readme/current-heart-suture.jpg)](docs/readme/current-heart-suture.jpg) | [![TelePharm mascot with a stitched heart and a smiling face.](docs/readme/anatomation-stitch-heart.webp)](stitch-heart-mascot.png) |
-| [NIH 3D model files](assets/heart-nih3d/) | [Mascot artwork](stitch-heart-mascot.png) |
-
-**Anatomation workstation prototype**
-
-[![Static browser workstation design with a practice-pad reference, procedure steps, and coaching panel.](docs/readme/anatomation-workstation-prototype.webp)](surgisense-design/dashboard-preview.png)
-
-</details>
+[![The Procedures window with Skin: suture the laceration selected, both instruments checked off, and the steps for the first stitch.](docs/readme/current-procedures.jpg)](docs/readme/current-procedures.jpg)
 
 ## Quick start
 
-| I want to… | Open | What I need |
-| --- | --- | --- |
-| Practice suturing on skin | [Desktop workstation](#launch-the-desktop-workstation) | Python 3.11 with Tk and working OpenGL |
-| Try a heart procedure | [Launch modes](#launch-modes) | The same desktop setup |
-| Explore the Anatomation designs | [Browser workbench](#browser-workbench) | The static design previews in this repository |
-| Use gloves or a hosted coach | [Live glove and AI coaching](#live-glove-and-ai-coaching) | Rokoko Device SDK and hand solver for live tracking, or hosted coaching credentials |
+Python 3.11. Without gloves, `--preview` drives both hands from the keyboard.
 
-### Launch the desktop workstation
+**macOS** (MuJoCo's viewer needs `mjpython`):
 
-Open PowerShell at the repository root and run:
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+mjpython surgical_suturing_guided.py --preview
+
+# Start in a specific procedure:
+mjpython surgical_suturing_guided.py --preview --procedure heart-bypass
+```
+
+**Windows** (PowerShell at the repository root):
 
 ```powershell
 py -3.11 -m venv .venv
@@ -72,193 +95,109 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe surgical_suturing_guided.py --preview
 ```
 
-The **MuJoCo: Operating room** and **Anatomation | Procedures** windows open with **Skin: suture the laceration** selected. Preview mode uses the keyboard for both hands. For macOS setup, see the [simulator guide](SIMULATOR.md#run-on-macos).
+The **MuJoCo: Operating room** and **Anatomation | Procedures** windows open with **Skin: suture the laceration** selected.
 
-### Launch modes
+### With Rokoko gloves
 
-<details open>
-<summary><strong>Choose a procedure</strong></summary>
-
-Select an exercise in **Anatomation | Procedures**, or press <kbd>P</kbd> in the viewer to cycle through the exercises. If you close the picker, click **Procedures** in the viewer’s **Equality** panel to reopen it.
-
-| Exercise | `--procedure` values |
-| --- | --- |
-| Guided incision | `skin-incision`, `heart-incision` |
-| Guided suturing | `skin-suture` (default), `heart-suture` |
-| Guided coronary artery bypass | `heart-bypass` |
-| Prompted free stitching | `skin-stitch`, `heart-stitch` |
-| Free practice | `skin-free`, `heart-free` |
-
-To open directly on the heart:
-
-```powershell
-.\.venv\Scripts\python.exe surgical_suturing_guided.py --preview --procedure heart-suture
+```bash
+rokoko-sdk --auto-stream-usb               # terminal 1: glove driver
+rkk-hand-solver --no-driver --emit-openxr  # terminal 2: hand solver
+mjpython surgical_suturing_guided.py       # terminal 3: the simulator
 ```
 
-</details>
-
-## First practice run
+The simulator reads both gloves straight from the solver (port 12277). If one glove isn't streaming, a keyboard-driven hand takes its place. To calibrate, rest your hands palm-down with the fingers toward the screen, and press <kbd>H</kbd> to recalibrate at any time.
 
 <details>
-<summary><strong>Follow the keyboard checklist</strong></summary>
+<summary><strong>Keyboard controls</strong></summary>
 
-In **Skin: suture the laceration**, the green cuff marks the hand controlled by the movement keys. The status overlay identifies the hand and the next key. Use the **Procedures** window to see the full checklist for the current stitch.
-
-</details>
-
-1. **Equip both hands.** Press <kbd>2</kbd>, then <kbd>G</kbd> to give the right hand the needle holder. The active hand switches to the left. Press <kbd>3</kbd>, then <kbd>G</kbd> to pick up the forceps.
-2. **Follow the stitch prompts.** The left forceps lift each edge while the right needle holder passes through it. The left forceps then grasp the needle tip and pull the virtual suture through.
-3. **Tie and finish.** Use <kbd>T</kbd> for each of the three knot throws. Follow the checklist through the remaining stitches and use the status overlay to see the score. See the [simulator guide](SIMULATOR.md#two-handed-technique) for the full exercise sequence.
-
-<details>
-<summary><strong>Keyboard shortcuts and viewport controls</strong></summary>
-
-| Control | Action in the workstation |
+| Action | Keys / mouse |
 | --- | --- |
-| <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd> | Select scalpel / needle holder / forceps / suture scissors |
-| <kbd>G</kbd> | Pick up the selected instrument or set down the held one |
-| <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> | Translate along the table |
-| <kbd>Q</kbd> / <kbd>E</kbd> | Raise / lower |
-| <kbd>Z</kbd> / <kbd>Y</kbd> | Swap hands / toggle moving both hands together |
-| <kbd>N</kbd> | Assist with tool alignment for the current action |
-| <kbd>F</kbd> / <kbd>T</kbd> / <kbd>X</kbd> | Grip or pass the needle / throw a knot / trim |
-| <kbd>R</kbd> / <kbd>K</kbd> / <kbd>H</kbd> | Save and reset the attempt / toggle the key guide / recalibrate the gloves |
-| <kbd>I</kbd> / <kbd>B</kbd> / <kbd>V</kbd> | Open the AI assistant / request a Gemma review / toggle Gemini voice |
+| Choose an instrument | <kbd>1</kbd> scalpel · <kbd>2</kbd> needle holder · <kbd>3</kbd> forceps · <kbd>4</kbd> scissors, then <kbd>G</kbd> to pick it up or set it down |
+| Move the hand | Arrows and <kbd>Q</kbd>/<kbd>E</kbd>. <kbd>Z</kbd> swaps hands, <kbd>Y</kbd> moves both together, and double-clicking a hand selects it |
+| Suturing | <kbd>N</kbd> aligns the tool · <kbd>F</kbd> grips or passes the needle · <kbd>T</kbd> throws a knot · <kbd>X</kbd> trims |
+| Procedure | Procedures window or <kbd>P</kbd>. <kbd>R</kbd> scores the attempt and starts over |
+| Camera | Scroll to zoom, left-drag to orbit, right-drag to pan, <kbd>0</kbd> to reset |
+| AI coach | <kbd>I</kbd> assistant window · <kbd>V</kbd> voice on/off · <kbd>B</kbd> Gemma review |
+| Help | <kbd>K</kbd> shows the key guide · <kbd>M</kbd> mutes the OR sounds |
 
-Scroll to zoom, left-drag to orbit, right-drag to pan, and press <kbd>0</kbd> to reset the view. Double-click a hand to select it, or double-right-click a spot to zoom around it.
+The status bar always names the hand and the key for the next step. The full step-by-step technique is in **[SIMULATOR.md](SIMULATOR.md)**.
 
 </details>
 
-## Session review
+## Hands-only modes (gloves, no keys)
 
-The status overlay shows the most recent score and the best complete score for the current procedure. The simulator writes attempt summaries to `training-data/attempts/` when you finish, press <kbd>R</kbd>, switch exercises, or close the viewer with an attempt in progress. Complete recordings are saved in `training-data/runs/`.
+These modes are the telemetry showcase. The gloves report how your wrist turns and your fingers bend, so every step is done **by moving your wrist**: no keys, no arm movement.
 
-Choose **Autopilot** in the **Equality** panel to replay the best complete recording for the current procedure. Starting replay also exports the instrument trajectory to `training-data/robot/`.
+1. The next target **glows yellow**.
+2. The tool glides to just above it while the prompt says *"Relax your wrist: moving into place"*.
+3. **Bend your wrist down.** A magnet draws the tool over the target, and it snaps in.
+4. **Turn your wrist** to cut or to push the needle through, then **bend it up** to pull the thread.
 
-<details>
-<summary><strong>What the simulator measures</strong></summary>
+In the **hands-only bypass**, the graft snaps into your hand and then onto the opening, so the whole operation runs as cut → pick up → attach → cut → pick up → attach. When it's finished, the graft fills with blood and pulses. Testing shows both modes can be finished within about 8° of side-to-side and 12° of up-and-down wrist movement.
 
-| Measure | Meaning |
-| --- | --- |
-| Task time | Elapsed time for each recorded cut or stitch |
-| Instrument travel | Distance traveled by the instrument tip during a task |
-| Rejected actions | Inputs the simulator refused, such as a needle pass attempted before the target was reached |
-| Needle accuracy | Distance from the needle target during a pass |
+## Scoring, replay and AI coach
 
-The score describes performance within the simulated exercise.
+- **Recording**: every attempt is recorded at 60 fps: both gloves' joints, every key and every instrument action.
+- **Scoring**: each cut and each stitch is scored out of 100 on time, instrument travel, needle accuracy and refused actions.
+- **Autopilot**: replays the best attempt at each site exactly, as a reference to learn from. It also exports a tool trajectory for a two-arm robot to `training-data/robot/`.
+- **Where attempts go**: summaries go to `training-data/attempts/` and full recordings to `training-data/runs/`. An attempt is saved when you finish, press <kbd>R</kbd>, switch exercises or close the viewer.
+- **AI assistant (Gemini)**: ask by voice or by typing, e.g. *"what do I do now?"*. It answers from the live state of the simulator: the current step, the hand to use and your last score compared with the best. In hands-only modes it gives wrist movements, never keys.
+- **Debrief (Gemma)**: after each complete attempt, Gemma writes a short review from a rendered frame and the task scores. It runs on Modal with open weights, or on Google AI Studio.
+- **Aiven**: attempts are saved locally first and then synced to **Aiven PostgreSQL**, which provides the best runs and benchmarks for everyone. Live telemetry streams to **Aiven Kafka**, and an instructor can follow it with `python telemetry_monitor.py`.
 
-</details>
+To set it up, run `pip install -r requirements-ai.txt` and copy [`.env.example`](.env.example) to `.env`. Then set `SURGERY_GEMMA_API_KEY` for Gemini and hosted Gemma, `GEMMA_MODAL_URL` and `GEMMA_MODAL_TOKEN` for Gemma on Modal, and the Aiven settings if you have them. Recording, scoring and the autopilot all work offline without them. Keep keys out of commits.
 
-## Browser workbench
-
-Explore the [Anatomation design previews](surgisense-design/) for the browser workstation and analysis layouts. The desktop simulator writes its own attempt summaries and recordings to `training-data/`.
-
-## Live glove and AI coaching
-
-<details>
-<summary><strong>Connect Rokoko Smartgloves over USB</strong></summary>
-
-1. Start the Rokoko Device SDK with `rokoko-sdk --auto-stream-usb`.
-2. In a separate terminal, start the hand solver with `rkk-hand-solver --no-driver --emit-openxr`. The simulator reads the solver’s local TCP stream on port `12277`.
-3. Launch the simulator without `--preview`. Focus the viewport, press <kbd>H</kbd>, and rest your hands palm-down with your fingers pointing toward the monitor to calibrate.
-
-A hand without a connected glove uses the keyboard. See the [documented macOS setup](SIMULATOR.md#run-on-macos) for the full launch commands.
-
-</details>
-
-<details>
-<summary><strong>Enable Gemma frame review and Gemini voice or text</strong></summary>
-
-Install the optional requirements in the project’s virtual environment:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-ai.txt
-```
-
-Copy [`.env.example`](.env.example) to `.env`. Set `SURGERY_GEMMA_API_KEY` for Gemini and hosted Gemma, or configure `GEMMA_MODAL_URL` and `GEMMA_MODAL_TOKEN` for Gemma on Modal.
-
-| Action | Data sent to the hosted coach |
-| --- | --- |
-| <kbd>B</kbd> or **Gemma review** | A rendered simulation frame and exercise context go to Gemma. |
-| <kbd>V</kbd> or **AI Voice** | Gemini receives microphone clips and exercise context while voice is active. |
-| <kbd>I</kbd> or **AI Assistant**, then type a question | Gemini receives the question and current exercise context. |
-
-For optional PostgreSQL attempt sync and Kafka telemetry, follow the [Aiven setup in the simulator guide](SIMULATOR.md#recording-scoring-autopilot-and-ai-coach). The simulator can score, save, and replay exercises locally.
-
-</details>
-
-## Cardiac operating room (environment)
-
-`surgical_suturing_guided.py` runs in a full cardiac operating room from `environment/`
-(`environment_simulator.xml`, included by `or_scene.py`): the draped patient on the OR table,
-intact prepped skin (skin procedures) or the opened chest with retractor, pericardium and bypass
-lines into the heart (heart procedures), heart-lung machine, anaesthesia machine, surgical lights,
-an extra cardiac instrument stand beside the trays, and moving screens (vitals, CT viewer, beating
-heart, perfusion, case board). Cuts and stitches on the skin follow the curve of the chest.
-`environment/or_controls.py` (numpy + mujoco only) adds these buttons to the viewer's Equality
-panel, next to Procedures, Reset hands and the others:
-
-| Control | Action |
-| --- | --- |
-| **Reset view** | Camera back to the surgeon's view (like <kbd>0</kbd>) |
-| **Reset instruments** | Tools back in the trays (the repair stays), heart back in the chest |
-| **Lift heart out** / double-click the heart | Lifts the heart out of the chest; Ctrl + right-drag moves it, Ctrl + left-drag turns it; wounds and stitches move with it. The button again puts it back |
-| **Load heart (STL)** or `--heart file.stl` | Another heart model (STL or OBJ; x anterior, y left, z superior; mm or m) replaces the NIH heart; the viewer reopens with it |
-| Camera | Stays inside the room when zooming out |
-
-`environment/README.txt` explains how it is connected; replace the whole folder to update it.
-
-## Project map
+## How it works
 
 ```mermaid
 flowchart LR
-    Input[Keyboard or Rokoko Smartgloves] --> Viewer[MuJoCo workstation]
-    Viewer --> Exercise[Skin and heart procedures]
-    Exercise --> Review[Local scores and recordings]
-    Review --> Replay[Autopilot replay]
-    Viewer -->|When enabled| Coach[Gemma and Gemini]
-    Review -->|When configured| Aiven[Aiven sync]
-    Web[SurgiSense browser designs]
-    classDef simulator fill:#FFE900,stroke:#080808,stroke-width:3px,color:#080808
-    classDef review fill:#CAFF00,stroke:#080808,stroke-width:3px,color:#080808
-    class Input,Viewer,Exercise simulator
-    class Review,Replay,Coach,Aiven,Web review
+    Gloves[Rokoko gloves<br/>or keyboard] --> Sim[MuJoCo simulator<br/>surgical_suturing_guided.py]
+    Sim --> Proc[Procedures<br/>suture · incision · bypass · hands-only]
+    Room[Operating room<br/>environment/] --> Sim
+    Sim --> Log[Recording and scoring<br/>motion_log.py]
+    Log --> Aiven[(Aiven PostgreSQL<br/>and Kafka)]
+    Aiven -->|best runs| Auto[Autopilot replay]
+    Sim <-->|live state| Coach[AI assistant<br/>Gemini voice and text]
+    Log --> Gemma[Gemma debrief]
+    classDef core fill:#FFE900,stroke:#080808,stroke-width:3px,color:#080808
+    classDef ai fill:#CAFF00,stroke:#080808,stroke-width:3px,color:#080808
+    class Gloves,Sim,Proc,Room core
+    class Log,Aiven,Auto,Coach,Gemma ai
 ```
 
 | Files | Role |
 | --- | --- |
-| [`surgical_suturing_guided.py`](surgical_suturing_guided.py), [`procedure_window.py`](procedure_window.py) | Desktop entry point, glove input, and procedure picker |
-| [`procedures.py`](procedures.py), [`bypass.py`](bypass.py) | Exercise definitions and the coronary bypass procedure |
-| [`or_scene.py`](or_scene.py), [`environment/`](environment/) | Operating-room scene, instruments, and viewer controls |
-| [`motion_log.py`](motion_log.py), [`aiven_store.py`](aiven_store.py) | Scoring, recording, replay, and optional sync |
-| [`coach.py`](coach.py), [`gemma_review.py`](gemma_review.py), [`gemini_voice.py`](gemini_voice.py) | Visual, voice, and text coaching |
-| [`SIMULATOR.md`](SIMULATOR.md) | Full simulator guide |
+| [`surgical_suturing_guided.py`](surgical_suturing_guided.py) | Entry point: glove tracking, instruments, two-handed cutting and suturing |
+| [`or_scene.py`](or_scene.py), [`environment/`](environment/) | The scene: heart model, skin and heart surfaces, and the cardiac operating room |
+| [`procedures.py`](procedures.py), [`bypass.py`](bypass.py) | The procedure list, incisions and the guided bypass |
+| [`glove_suture.py`](glove_suture.py), [`glove_bypass.py`](glove_bypass.py) | Hands-only suturing and bypass (snap points, wrist-only movement) |
+| [`motion_log.py`](motion_log.py) | Recording, scoring, autopilot and robot trajectory export |
+| [`coach.py`](coach.py), [`gemini_voice.py`](gemini_voice.py), [`gemma_review.py`](gemma_review.py), [`assistant_window.py`](assistant_window.py) | The AI assistant and debriefs |
+| [`aiven_store.py`](aiven_store.py), [`telemetry_monitor.py`](telemetry_monitor.py) | Aiven PostgreSQL sync and live Kafka telemetry |
+| [`modal_gemma.py`](modal_gemma.py) | Gemma served on a Modal GPU |
+| [`assets/heart-nih3d/`](assets/heart-nih3d/) | NIH 3D heart model |
+
+The full guide covering controls, technique, sites and data is in **[SIMULATOR.md](SIMULATOR.md)**.
 
 <details>
-<summary><strong>Other prototypes, assets, and licensing</strong></summary>
+<summary><strong>Earlier prototype: TelePharm workstation</strong></summary>
 
-- [`surgisense-design/`](surgisense-design/) contains the static workstation and analysis designs.
-- [`assets/heart-nih3d/`](assets/heart-nih3d/) contains the NIH 3D heart model, meshes, and materials.
-- [`environment/README.txt`](environment/README.txt) documents the cardiac operating-room scene and its integration.
+Before the operating-room simulator, the team built **TelePharm**, a Windows workstation with a procedure checklist, session review and the SurgiSense browser workbench. Its code is not in this repository; these are screenshots from it.
+
+| Heart workstation | Session review |
+| :---: | :---: |
+| ![TelePharm heart workstation with a procedure checklist and live feedback](docs/readme/anatomation-heart-lab.webp) | ![TelePharm session review with a tip trajectory and timeline](docs/readme/anatomation-session-review.webp) |
+| **Operating room** | **SurgiSense analysis** |
+| ![Early MuJoCo operating room with a practice pad](docs/readme/anatomation-operating-room.webp) | ![SurgiSense browser workbench with a pad map and measurements](docs/readme/anatomation-surgisense-analysis.webp) |
+
+![TelePharm keyboard run, animated](docs/readme/anatomation-keyboard-replay.gif)
 
 </details>
 
-##  Troubleshooting
+## Credits
 
-<details>
-<summary><strong>Viewer startup, tracking, microphone, or missing sessions</strong></summary>
+Built at **Junction 2026**. The cardiac operating room environment is by saimn80. The voice assistant and the TelePharm prototype are by hadi-ce04. The demo video is by Simon Steiner. The heart model is from the NIH 3D Print Exchange.
 
-| Symptom | Check |
-| --- | --- |
-| `ModuleNotFoundError` | Install `requirements.txt` using the same virtual environment that launches `surgical_suturing_guided.py`. |
-| The viewer fails to create a render context | Run in a desktop session with working OpenGL graphics. On macOS, launch with `mjpython`. |
-| The Procedures window closed | Open **Equality** in the viewer and click **Procedures**, or press <kbd>P</kbd> to cycle through exercises. |
-| The glove stays on **Waiting** | Check the USB connection, Device SDK, and hand solver stream on port `12277`. |
-| The glove points the wrong way | Press <kbd>H</kbd> in the viewer and rest your hands palm-down with fingers toward the monitor. |
-| <kbd>V</kbd> cannot open the microphone | Install `requirements-ai.txt` and check the current default input device and microphone permissions. |
-| The coach reports an API error | Check the credentials for the selected backend and network access to its endpoint. |
-| Autopilot has no replay | Complete an attempt in the same procedure so a recording is available. |
+> The tissue, cuts and stitches are geometric simulations for training motion and procedure flow. The scores describe the virtual exercise and are not a validated clinical assessment.
 
-</details>
-
-[Back to top](#anatomation)
+<div align="right"><a href="#anatomation">Back to top ↑</a></div>
