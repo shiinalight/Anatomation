@@ -1,0 +1,4 @@
+# Tests and lint (on top of requirements.txt): pytest, then ruff check .
+-r requirements.txt
+pytest
+ruff
