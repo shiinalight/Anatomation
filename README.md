@@ -18,7 +18,7 @@ Cut, stitch and perform a coronary artery bypass in a virtual operating room. Ro
 
 <br><br>
 
-**[Why](#why-anatomation)** · **[What you can practise](#what-you-can-practise)** · **[Quick start](#quick-start)** · **[Hands-only modes](#hands-only-modes-gloves-no-keys)** · **[AI coach and scoring](#scoring-replay-and-ai-coach)** · **[How it works](#how-it-works)**
+**[Why](#why-anatomation)** · **[What you can practise](#what-you-can-practise)** · **[Quick start](#quick-start)** · **[Hands-only modes](#hands-only-modes-gloves-no-keys)** · **[AI coach and scoring](#scoring-replay-and-ai-coach)** · **[How it works](#how-it-works)** · **[Development](#development)**
 
 ![MuJoCo 4](https://img.shields.io/badge/MuJoCo-4-2847F4?style=flat-square&labelColor=080808)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-FF6300?style=flat-square&logo=python&logoColor=FFFFFF)
@@ -151,33 +151,52 @@ To set it up, run `pip install -r requirements-ai.txt` and copy [`.env.example`]
 
 ```mermaid
 flowchart LR
-    Gloves[Rokoko gloves<br/>or keyboard] --> Sim[MuJoCo simulator<br/>surgical_suturing_guided.py]
-    Sim --> Proc[Procedures<br/>suture · incision · bypass · hands-only]
-    Room[Operating room<br/>environment/] --> Sim
-    Sim --> Log[Recording and scoring<br/>motion_log.py]
+    Gloves[Rokoko gloves<br/>glove_input.py] --> App
+    Keys[Keyboard and panel<br/>keymap.py] --> App
+    App[Viewer loop<br/>app.py] --> Session[Session<br/>session.py]
+    Session --> Station[Station: hands, instruments,<br/>technique rules · station.py]
+    Station --> Proc[Procedures and hands-only guides<br/>procedures · bypass · glove_*]
+    Room[Scene and operating room<br/>or_scene.py · environment/] --> Station
+    Session --> Log[Recording and scoring<br/>motion_log.py]
     Log --> Aiven[(Aiven PostgreSQL<br/>and Kafka)]
-    Aiven -->|best runs| Auto[Autopilot replay]
-    Sim <-->|live state| Coach[AI assistant<br/>Gemini voice and text]
-    Log --> Gemma[Gemma debrief]
+    Aiven -->|best runs| Session
+    App <-->|live state| Coach[AI assistant<br/>Gemini · Gemma]
     classDef core fill:#FFE900,stroke:#080808,stroke-width:3px,color:#080808
     classDef ai fill:#CAFF00,stroke:#080808,stroke-width:3px,color:#080808
-    class Gloves,Sim,Proc,Room core
-    class Log,Aiven,Auto,Coach,Gemma ai
+    class Gloves,Keys,App,Session,Station,Proc,Room core
+    class Log,Aiven,Coach ai
 ```
+
+Each frame, the viewer loop (`app.py`) reads the gloves and keys, the session advances the station with them, and the station's state is drawn and recorded. Every input, including panel buttons and glove readiness, goes through the station as a key code. That is why a recorded attempt replays exactly.
 
 | Files | Role |
 | --- | --- |
-| [`surgical_suturing_guided.py`](surgical_suturing_guided.py) | Entry point: glove tracking, instruments, two-handed cutting and suturing |
-| [`or_scene.py`](or_scene.py), [`environment/`](environment/) | The scene: heart model, skin and heart surfaces, and the cardiac operating room |
+| [`surgical_suturing_guided.py`](surgical_suturing_guided.py) | Entry point: command-line options, starts the glove stream and the viewer |
+| [`app.py`](app.py) | The viewer loop: input each frame, panel buttons, drawing, sounds, overlay text, side windows |
+| [`glove_input.py`](glove_input.py), [`keymap.py`](keymap.py) | Glove stream (RGMP), yaw calibration and hand mapping; key codes and held-key movement |
+| [`session.py`](session.py) | One attempt: recording, scoring, saving, the autopilot |
+| [`station.py`](station.py) | The two hands, their instruments and the cutting and suturing rules |
+| [`instruments.py`](instruments.py) | Instrument geometry and drawing (scalpel, needle holder, forceps, scissors, gloves) |
 | [`procedures.py`](procedures.py), [`bypass.py`](bypass.py) | The procedure list, incisions and the guided bypass |
 | [`glove_suture.py`](glove_suture.py), [`glove_bypass.py`](glove_bypass.py) | Hands-only suturing and bypass (snap points, wrist-only movement) |
-| [`motion_log.py`](motion_log.py) | Recording, scoring, autopilot and robot trajectory export |
-| [`coach.py`](coach.py), [`gemini_voice.py`](gemini_voice.py), [`gemma_review.py`](gemma_review.py), [`assistant_window.py`](assistant_window.py) | The AI assistant and debriefs |
-| [`aiven_store.py`](aiven_store.py), [`telemetry_monitor.py`](telemetry_monitor.py) | Aiven PostgreSQL sync and live Kafka telemetry |
-| [`modal_gemma.py`](modal_gemma.py) | Gemma served on a Modal GPU |
-| [`assets/heart-nih3d/`](assets/heart-nih3d/) | NIH 3D heart model |
+| [`or_scene.py`](or_scene.py), [`environment/`](environment/) | The scene: heart model, skin and heart surfaces, and the cardiac operating room |
+| [`motion_log.py`](motion_log.py) | Recording format, task scoring, autopilot and robot trajectory export |
+| [`coach.py`](coach.py), [`gemini_voice.py`](gemini_voice.py), [`gemma_review.py`](gemma_review.py), [`assistant_window.py`](assistant_window.py), [`procedure_window.py`](procedure_window.py) | The AI assistant, debriefs and the side windows |
+| [`aiven_store.py`](aiven_store.py), [`telemetry_monitor.py`](telemetry_monitor.py), [`modal_gemma.py`](modal_gemma.py) | Aiven PostgreSQL sync, live Kafka telemetry, Gemma on Modal |
+| [`tests/`](tests/) | Simulated trainees (keyboard and glove) that run every procedure |
+| [`assets/heart-nih3d/`](assets/heart-nih3d/), [`docs/`](docs/) | NIH 3D heart model; README images and the project gallery |
 
 The full guide covering controls, technique, sites and data is in **[SIMULATOR.md](SIMULATOR.md)**.
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+pytest          # simulated trainees run every procedure, about 10 s
+ruff check .    # lint
+```
+
+The tests need no display, gloves or network. They drive the station with keyboard and glove trainees, check that the technique rules refuse steps done out of order, and check that recorded attempts replay exactly. [GitHub Actions](.github/workflows/tests.yml) runs both on every push and pull request.
 
 <details>
 <summary><strong>Earlier prototype: TelePharm workstation</strong></summary>
@@ -191,6 +210,8 @@ Before the operating-room simulator, the team built **TelePharm**, a Windows wor
 | ![Early MuJoCo operating room with a practice pad](docs/readme/anatomation-operating-room.webp) | ![SurgiSense browser workbench with a pad map and measurements](docs/readme/anatomation-surgisense-analysis.webp) |
 
 ![TelePharm keyboard run, animated](docs/readme/anatomation-keyboard-replay.gif)
+
+More renders, the mascot and the SurgiSense design previews are in [`docs/gallery/`](docs/gallery/).
 
 </details>
 
