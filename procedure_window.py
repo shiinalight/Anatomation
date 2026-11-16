@@ -33,7 +33,7 @@ class ProcedureClient(WindowProcess):
 class ProcedureWindow:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("SurgiSense | Procedures")
+        self.root.title("Anatomation | Procedures")
         self.root.geometry("380x330+40+80")
         self.inbox = queue.SimpleQueue()
         self.keys, self.labels, self.current = [], [], None

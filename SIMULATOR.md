@@ -207,8 +207,17 @@ this, recording, scoring and the autopilot still work locally.
 
 ## Files
 
-- `surgical_suturing_guided.py`: glove tracking (both gloves), instruments and the
-  two-handed cutting and suturing logic.
+- `surgical_suturing_guided.py`: the entry point (command-line options); it starts the glove
+  stream and opens the viewer.
+- `app.py`: the viewer loop: gloves, keys and panel buttons each frame, drawing, sounds, the
+  overlay text and the side windows.
+- `glove_input.py`: the glove stream from rkk-hand-solver (RGMP v2), the yaw calibration and the
+  mapping of glove joints into the room; keyboard hands for gloves that are not streaming.
+- `keymap.py`: key codes (including the synthetic ones for panel buttons and glove state, recorded
+  like keys so replays are exact) and continuous movement for held keys.
+- `station.py`: the two hands, their instruments and the cutting and suturing rules.
+- `session.py`: one attempt: recording, scoring, saving and the autopilot.
+- `instruments.py`: instrument geometry and drawing (and the gloved hands).
 - `or_scene.py`: the scene (heart model import, skin and heart surface queries, trays,
   patient monitor, sounds); it includes the operating room from `environment/`.
 - `environment/`: saimn80's cardiac operating room (`environment_simulator.xml` and its
@@ -229,3 +238,4 @@ this, recording, scoring and the autopilot still work locally.
   window layout are ported from hadi-ce04's `feature/ai-assistant-aiven` branch.
 - `modal_gemma.py`: Gemma served on a Modal GPU (vLLM, OpenAI-compatible API).
 - `assets/heart-nih3d/`: the heart model (MJCF, three OBJ meshes, MTL), unchanged.
+- `tests/`: simulated trainees for every procedure (`pytest`; see the README).

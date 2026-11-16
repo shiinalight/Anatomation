@@ -11,7 +11,7 @@ lies on the straight arm of the visible coronary artery on the anterior surface,
 aortotomy on the top ridge of the ascending aorta. All heights come from the meshes at
 run time (`HeartTissue.any_point`), so the targets sit exactly on the vessel surfaces.
 
-Both hands work as in theatre (see CuttingStation in surgical_suturing_guided.py): the right
+Both hands work as in theatre (see CuttingStation in station.py): the right
 hand cuts on its own (no steadying hand in the bypass); while suturing, the left hand's forceps
 lift each edge before the needle passes through it and take the needle to pull the suture through
 before the instrument tie.

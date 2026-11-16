@@ -157,7 +157,7 @@ class AssistantClient(WindowProcess):
 class AssistantWindow:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("SurgiSense | AI Assistant")
+        self.root.title("Anatomation | AI Assistant")
         self.root.geometry("480x460")
         self.root.minsize(340, 260)
         self.inbox = queue.SimpleQueue()

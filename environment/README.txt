@@ -18,8 +18,8 @@ This folder is generated. Do not edit the files by hand; when a new version arri
 whole environment/ folder and commit it (git add environment). Exported in high quality.
 
 
-HOW THE SIMULATOR USES IT (already done in or_scene.py / surgical_suturing_guided.py)
-------------------------------------------------------------------------------------
+HOW THE SIMULATOR USES IT (already done in or_scene.py / app.py)
+-----------------------------------------------------------------
 
 1) ENV_XML = Path(__file__).resolve().parent / "environment" / "environment_simulator.xml"
 2) In _scene_xml(), directly after </visual>:   <include file="{ENV_XML.as_posix()}"/>
@@ -33,7 +33,7 @@ HOW THE SIMULATOR USES IT (already done in or_scene.py / surgical_suturing_guide
    make_tissue() builds a site inside or_controls.heart_home() (works with the heart lifted out);
    With another heart model (HEART_FILE) the bypass marks (placed for the NIH heart) are projected
    onto it.
-5) The hook in surgical_suturing_guided.py (search for "controls"):
+5) The hook in app.py, display() (search for "controls"):
        controls = EnvironmentControls(model, data)
        pressed += controls.step(viewer, now, session.station)    # room buttons; Reset view = key 0
        if controls.new_heart: return controls.new_heart, session.procedure
